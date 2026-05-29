@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
-import { useAuthStore } from "@/stores/auth-store";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { FileText, CheckCircle2, AlertTriangle, XCircle, Clock, Loader2 } from "lucide-react";
@@ -37,15 +36,13 @@ const STATUS_MAP: Record<string, { label: string; color: string; icon: typeof Ch
 };
 
 export default function HistoryPage() {
-  const { user } = useAuthStore();
   const router = useRouter();
   const [analyses, setAnalyses] = useState<AnalysisItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) { router.push("/login"); return; }
     loadAnalyses();
-  }, [user, router]);
+  }, []);
 
   const loadAnalyses = async () => {
     try {
@@ -57,8 +54,6 @@ export default function HistoryPage() {
       setLoading(false);
     }
   };
-
-  if (!user) return null;
 
   const scoreColor = (s: number) => s >= 80 ? "text-green-600" : s >= 50 ? "text-amber-600" : "text-red-600";
 

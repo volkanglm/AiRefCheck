@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { useAuthStore } from "@/stores/auth-store";
-import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,8 +25,6 @@ interface ApiKeyConfig {
 }
 
 export default function SettingsPage() {
-  const { user } = useAuthStore();
-  const router = useRouter();
   const [keys, setKeys] = useState<ApiKeyConfig[]>([]);
   const [editing, setEditing] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -36,9 +32,8 @@ export default function SettingsPage() {
   const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   useEffect(() => {
-    if (!user) { router.push("/login"); return; }
     loadKeys();
-  }, [user, router]);
+  }, []);
 
   const loadKeys = async () => {
     try {
@@ -55,7 +50,6 @@ export default function SettingsPage() {
     setSaving(true);
     setMessage(null);
     try {
-      // Only send keys that were edited
       const changed: Record<string, string> = {};
       for (const [k, v] of Object.entries(editing)) {
         if (v.trim()) changed[k] = v.trim();
@@ -76,12 +70,9 @@ export default function SettingsPage() {
     }
   };
 
-  if (!user) return null;
-
   return (
     <AppShell>
       <div className="mx-auto max-w-3xl space-y-6">
-        {/* Header */}
         <div className="flex items-center gap-3">
           <SettingsIcon className="h-6 w-6 text-slate-600" />
           <h2 className="text-xl font-bold text-slate-900">Ayarlar</h2>
@@ -93,7 +84,7 @@ export default function SettingsPage() {
             <div className="flex items-start gap-3">
               <Shield className="mt-0.5 h-5 w-5 text-blue-500" />
               <div>
-                <p className="font-medium text-slate-800">AiRefCheck — Tamamen Ücretsiz & Açık Kaynak</p>
+                <p className="font-medium text-slate-800">AiRefCheck — Tamamen Ücretsiz &amp; Açık Kaynak</p>
                 <p className="mt-1 text-sm text-slate-500">
                   Bu uygulama GPL-3.0 lisansı ile dağıtılmaktadır. Tüm akademik API&apos;ler ücretsizdir.
                   API anahtarlarınız yalnızca sizin makinenizde saklanır ve hiçbir yere gönderilmez.
@@ -188,21 +179,8 @@ export default function SettingsPage() {
 
             <div className="rounded-lg bg-blue-50 p-4 text-sm text-blue-700">
               <strong>Not:</strong> API anahtarlarınız yalnızca yerel makinenizin ortam değişkenlerinde saklanır.
-              Sunucuya veya üçüncü tarafa hiçbir veri gönderilmez. Uygulama açık kaynaklı olduğundan,
-              kodu inceleyerek bunu doğrulayabilirsiniz.
+              Sunucuya veya üçüncü tarafa hiçbir veri gönderilmez.
             </div>
-          </CardContent>
-        </Card>
-
-        {/* User Info */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Hesap Bilgileri</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div><span className="text-slate-500">Ad:</span> <strong>{user.firstName} {user.lastName}</strong></div>
-            <div><span className="text-slate-500">E-posta:</span> <strong>{user.email}</strong></div>
-            <div><span className="text-slate-500">Rol:</span> <strong>Kullanıcı</strong></div>
           </CardContent>
         </Card>
       </div>

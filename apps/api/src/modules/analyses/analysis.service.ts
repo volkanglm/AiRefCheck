@@ -27,7 +27,16 @@ export class AnalysisService {
     // Check if analysis already exists
     const existing = await this.prisma.analysis.findUnique({ where: { documentId } });
     if (existing && existing.status !== "FAILED") {
-      throw new ValidationError("Bu doküman için zaten bir analiz mevcut");
+      // Return existing analysis instead of throwing error
+      logger.info(`Returning existing analysis ${existing.id} for document ${documentId}`);
+      return existing;
+    }
+
+    // If previous analysis failed, delete it and retry
+    if (existing && existing.status === "FAILED") {
+      logger.info(`Deleting failed analysis ${existing.id}, retrying...`);
+      await this.prisma.reference.deleteMany({ where: { analysisId: existing.id } });
+      await this.prisma.analysis.delete({ where: { id: existing.id } });
     }
 
     const analysis = await this.prisma.analysis.create({
