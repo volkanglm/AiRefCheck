@@ -21,6 +21,45 @@ interface ParseJobData {
 }
 
 /**
+ * Map NLP type strings to Prisma ReferenceType enum values.
+ */
+const TYPE_MAP: Record<string, string> = {
+  "journal_article": "JOURNAL_ARTICLE",
+  "journal": "JOURNAL_ARTICLE",
+  "article": "JOURNAL_ARTICLE",
+  "book_chapter": "BOOK_CHAPTER",
+  "chapter": "BOOK_CHAPTER",
+  "book": "BOOK",
+  "conference_paper": "CONFERENCE_PAPER",
+  "conference": "CONFERENCE_PAPER",
+  "proceedings": "CONFERENCE_PAPER",
+  "thesis": "THESIS",
+  "master_thesis": "THESIS",
+  "phd_thesis": "DISSERTATION",
+  "dissertation": "DISSERTATION",
+  "technical_report": "TECHNICAL_REPORT",
+  "report": "TECHNICAL_REPORT",
+  "web_page": "WEB_PAGE",
+  "web": "WEB_PAGE",
+  "online_resource": "ONLINE_RESOURCE",
+  "website": "ONLINE_RESOURCE",
+  "newspaper_article": "NEWSPAPER_ARTICLE",
+  "newspaper": "NEWSPAPER_ARTICLE",
+  "preprint": "PREPRINT",
+  "dataset": "DATASET",
+  "software": "SOFTWARE",
+  "legal_document": "LEGAL_DOCUMENT",
+  "other": "OTHER",
+  "unknown": "OTHER",
+};
+
+function mapRefType(nlpType: string | null | undefined): string {
+  if (!nlpType) return "JOURNAL_ARTICLE";
+  const mapped = TYPE_MAP[nlpType.toLowerCase().trim()];
+  return mapped || "OTHER";
+}
+
+/**
  * Extract text from various document formats.
  */
 async function extractText(filePath: string, format: string): Promise<string> {
@@ -181,7 +220,7 @@ export function startParseWorker() {
               doi: ref.doi || null,
               url: ref.url || null,
               isbn: ref.isbn || null,
-              refType: ref.type || "JOURNAL_ARTICLE",
+              refType: mapRefType(ref.type),
               parseConfidence: ref.parse_confidence || null,
               status: "PENDING",
             },
