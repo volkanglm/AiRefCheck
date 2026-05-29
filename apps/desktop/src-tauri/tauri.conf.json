@@ -1,0 +1,80 @@
+{
+  "name": "AiRefCheck",
+  "version": "0.1.0",
+  "identifier": "com.airefcheck.desktop",
+  "description": "Akademik Referans Bütünlük Kontrol Platformu",
+  "build": {
+    "beforeBuildCommand": "pnpm build:web",
+    "beforeDevCommand": "pnpm dev:web",
+    "devPath": "http://localhost:3000",
+    "distDir": "../../apps/web/out"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "AiRefCheck - Referans Kontrol",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 700,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Education",
+    "shortDescription": "Akademik referans doğrulama aracı",
+    "longDescription": "Akademik dokümanlardaki referansların bütünlüğünü otomatik denetleyen platform. Uydurulmuş, eksik, fazla veya hatalı referansları tespit eder.",
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "entitlements": null,
+      "exceptionDomain": "",
+      "frameworks": [],
+      "providerShortName": null,
+      "signingIdentity": null
+    },
+    "externalBin": [
+      {
+        "name": "airefcheck-api",
+        "path": "binaries/api"
+      },
+      {
+        "name": "airefcheck-nlp",
+        "path": "binaries/nlp"
+      }
+    ],
+    "resources": [
+      "resources/*"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/OWNER/REPO/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": ""
+    }
+  }
+}

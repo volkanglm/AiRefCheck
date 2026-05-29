@@ -1,0 +1,42 @@
+{
+  "name": "airefcheck",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Akademik referans bütünlük kontrol platformu",
+  "scripts": {
+    "dev": "concurrently \"pnpm dev:api\" \"pnpm dev:web\" \"pnpm dev:nlp\"",
+    "dev:web": "pnpm --filter @airefcheck/web dev",
+    "dev:api": "pnpm --filter @airefcheck/api dev",
+    "dev:nlp": "cd apps/nlp && poetry run uvicorn app.main:app --reload --port 8000",
+    "build": "pnpm --filter @airefcheck/shared build && pnpm --filter @airefcheck/api build && pnpm --filter @airefcheck/web build",
+    "build:web": "pnpm --filter @airefcheck/web build",
+    "build:api": "pnpm --filter @airefcheck/api build",
+    "build:desktop": "cd apps/desktop && pnpm tauri build",
+    "test": "concurrently \"pnpm test:api\" \"pnpm test:web\" \"pnpm test:nlp\"",
+    "test:web": "pnpm --filter @airefcheck/web test",
+    "test:api": "pnpm --filter @airefcheck/api test",
+    "test:nlp": "cd apps/nlp && poetry run pytest",
+    "test:e2e": "pnpm --filter @airefcheck/web test:e2e",
+    "lint": "pnpm -r lint",
+    "lint:fix": "pnpm -r lint:fix",
+    "typecheck": "pnpm -r typecheck",
+    "db:migrate": "npx prisma migrate dev",
+    "db:studio": "npx prisma studio",
+    "db:seed": "npx prisma db seed",
+    "db:generate": "npx prisma generate",
+    "docker:up": "docker compose -f docker/docker-compose.yml up -d",
+    "docker:down": "docker compose -f docker/docker-compose.yml down",
+    "docker:logs": "docker compose -f docker/docker-compose.yml logs -f",
+    "docker:build": "docker compose -f docker/docker-compose.yml build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "prettier": "^3.3.0",
+    "eslint": "^8.57.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

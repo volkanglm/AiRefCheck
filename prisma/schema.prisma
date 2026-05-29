@@ -1,0 +1,401 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  FREE
+  PRO
+  INSTITUTION_ADMIN
+  SYSTEM_ADMIN
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String?
+  firstName     String
+  lastName      String
+  orcidId       String?   @unique
+  googleId      String?   @unique
+  role          UserRole  @default(FREE)
+  institutionId String?
+  avatarUrl     String?
+  locale        String    @default("tr")
+  emailVerified Boolean   @default(false)
+  isActive      Boolean   @default(true)
+
+  documents     Document[]
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+  institution   Institution? @relation(fields: [institutionId], references: [id])
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  isRevoked Boolean  @default(false)
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+model Institution {
+  id          String   @id @default(uuid())
+  name        String
+  domain      String?  @unique
+  logoUrl     String?
+  licenseType String   @default("basic")
+  maxUsers    Int      @default(10)
+  isActive    Boolean  @default(true)
+
+  users       User[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("institutions")
+}
+
+enum DocumentFormat {
+  PDF
+  DOCX
+  LATEX
+  BIBTEX
+  RIS
+  TXT
+  URL
+}
+
+enum DocumentStatus {
+  UPLOADED
+  PARSING
+  PARSED
+  ANALYZING
+  ANALYZED
+  ERROR
+}
+
+model Document {
+  id              String         @id @default(uuid())
+  userId          String
+  originalName    String
+  storedName      String         @unique
+  format          DocumentFormat
+  fileSize        Int
+  mimeType        String
+  status          DocumentStatus @default(UPLOADED)
+  errorMessage    String?
+  rawText         String?        @db.Text
+  language        String?
+  pageCount       Int?
+  detectedTitle   String?
+  detectedAuthors String?
+
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analysis        Analysis?
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deletedAt       DateTime?
+
+  @@index([userId])
+  @@index([status])
+  @@map("documents")
+}
+
+enum AnalysisStatus {
+  PENDING
+  EXTRACTING_REFERENCES
+  DETECTING_STYLE
+  VALIDATING
+  DETECTING_FABRICATION
+  MATCHING_CITATIONS
+  GENERATING_REPORT
+  COMPLETED
+  FAILED
+}
+
+model Analysis {
+  id                String         @id @default(uuid())
+  documentId        String         @unique
+  status            AnalysisStatus @default(PENDING)
+  progress          Int            @default(0)
+  errorMessage      String?
+
+  detectedStyle     String?
+  styleConfidence   Float?
+
+  totalReferences   Int            @default(0)
+  verifiedCount     Int            @default(0)
+  suspiciousCount   Int            @default(0)
+  notFoundCount     Int            @default(0)
+  partialMatchCount Int            @default(0)
+  missingCount      Int            @default(0)
+  orphanCount       Int            @default(0)
+  overallScore      Float?
+
+  startedAt         DateTime?
+  completedAt       DateTime?
+  processingTimeMs  Int?
+
+  document          Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  references        Reference[]
+  summary           AnalysisSummary?
+  report            Report?
+
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([documentId])
+  @@index([status])
+  @@map("analyses")
+}
+
+model AnalysisSummary {
+  id                  String   @id @default(uuid())
+  analysisId          String   @unique
+
+  statusDistribution  Json
+  sourceDistribution  Json
+  scoreDistribution   Json
+  yearDistribution    Json
+  referenceTypeDist   Json
+  warnings            Json
+  recommendations     Json
+
+  analysis            Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  createdAt           DateTime @default(now())
+
+  @@map("analysis_summaries")
+}
+
+enum ReferenceType {
+  JOURNAL_ARTICLE
+  BOOK
+  BOOK_CHAPTER
+  CONFERENCE_PAPER
+  THESIS
+  DISSERTATION
+  TECHNICAL_REPORT
+  WEB_PAGE
+  ONLINE_RESOURCE
+  NEWSPAPER_ARTICLE
+  PREPRINT
+  DATASET
+  SOFTWARE
+  LEGAL_DOCUMENT
+  OTHER
+}
+
+enum ReferenceStatus {
+  VERIFIED
+  SUSPICIOUS
+  NOT_FOUND
+  PARTIAL_MATCH
+  PENDING
+}
+
+model Reference {
+  id              String          @id @default(uuid())
+  analysisId      String
+  orderIndex      Int
+
+  rawText         String          @db.Text
+
+  authors         Json
+  year            Int?
+  title           String?
+  journal         String?
+  bookTitle       String?
+  publisher       String?
+  publisherCity   String?
+  volume          String?
+  issue           String?
+  pages           String?
+  doi             String?
+  url             String?
+  isbn            String?
+  edition         String?
+  editors         Json?
+  translators     Json?
+  refType         ReferenceType   @default(JOURNAL_ARTICLE)
+  language        String?
+
+  parseConfidence Float?
+  parseErrors     Json?
+
+  status          ReferenceStatus @default(PENDING)
+  confidenceScore Float?
+  bestMatchUrl    String?
+  bestMatchSource String?
+
+  suspicionLevel  String?
+  suspicionScore  Float?
+  suspicionReasons Json?
+
+  analysis        Analysis        @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  validations     Validation[]
+  inTextCitations InTextCitation[]
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@unique([analysisId, orderIndex])
+  @@index([analysisId])
+  @@index([status])
+  @@index([doi])
+  @@index([title])
+  @@map("references")
+}
+
+enum SourceStatus {
+  FOUND
+  NOT_FOUND
+  PARTIAL_MATCH
+  ERROR
+  TIMEOUT
+  RATE_LIMITED
+}
+
+model Validation {
+  id              String       @id @default(uuid())
+  referenceId     String
+  source          String
+  status          SourceStatus
+  confidenceScore Float?
+  sourceUrl       String?
+  sourceId        String?
+  matchedTitle    String?
+  matchedAuthors  Json?
+  matchedYear     Int?
+  matchedDoi      String?
+  metadata        Json?
+  responseTimeMs  Int?
+  errorMessage    String?
+  fromCache       Boolean      @default(false)
+
+  reference       Reference    @relation(fields: [referenceId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime     @default(now())
+
+  @@index([referenceId])
+  @@index([source])
+  @@index([source, status])
+  @@map("validations")
+}
+
+enum CitationMatchType {
+  EXACT
+  FUZZY
+  AMBIGUOUS
+  UNMATCHED
+}
+
+model InTextCitation {
+  id              String            @id @default(uuid())
+  referenceId     String?
+  analysisId      String
+  rawText         String
+  citationFormat  String
+  pageNumber      Int?
+  context         String?           @db.Text
+  matchType       CitationMatchType?
+  matchConfidence Float?
+
+  reference       Reference?        @relation(fields: [referenceId], references: [id], onDelete: SetNull)
+
+  createdAt       DateTime          @default(now())
+
+  @@index([analysisId])
+  @@index([referenceId])
+  @@map("intext_citations")
+}
+
+enum ReportFormat {
+  PDF
+  EXCEL
+  CSV
+  JSON
+}
+
+enum ReportStatus {
+  PENDING
+  GENERATING
+  COMPLETED
+  FAILED
+}
+
+model Report {
+  id             String       @id @default(uuid())
+  analysisId     String       @unique
+  format         ReportFormat
+  status         ReportStatus @default(PENDING)
+  fileUrl        String?
+  fileSize       Int?
+  templateName   String?
+  includeLogo    Boolean      @default(false)
+  logoUrl        String?
+  sections       Json
+  shareToken     String?      @unique
+  shareExpiresAt DateTime?
+
+  analysis       Analysis     @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("reports")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String
+  entity     String
+  entityId   String?
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+
+  user       User?    @relation(fields: [userId], references: [id])
+
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model ApiCache {
+  id        String   @id @default(uuid())
+  source    String
+  queryKey  String
+  queryType String
+  response  Json
+  hitCount  Int      @default(0)
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([source, queryKey])
+  @@index([source])
+  @@index([expiresAt])
+  @@map("api_cache")
+}
