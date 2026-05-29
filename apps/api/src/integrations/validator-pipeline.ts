@@ -14,7 +14,6 @@ import { OrcidClient } from "./orcid";
 import { SpringerClient } from "./springer";
 import { PlosClient } from "./plos";
 import { GutenbergClient } from "./gutenberg";
-import { GeminiService } from "./gemini-service";
 import { logger } from "../lib/logger";
 
 export interface PipelineResult {
@@ -28,7 +27,6 @@ export interface PipelineResult {
 
 export class ValidatorPipeline {
   private clients: BaseApiClient[];
-  private gemini: GeminiService;
 
   constructor(redis: Redis) {
     this.clients = [
@@ -42,7 +40,6 @@ export class ValidatorPipeline {
       new PlosClient(redis),
       new GutenbergClient(redis),
     ];
-    this.gemini = new GeminiService();
   }
 
   async validate(ref: ParsedRef): Promise<PipelineResult> {
@@ -56,28 +53,9 @@ export class ValidatorPipeline {
       return knownResult;
     }
 
-    // Use Gemini to enhance search queries (non-blocking — runs in parallel)
-    let enhancedRef = ref;
-    if (this.gemini.isEnabled() && !ref.title && !ref.doi) {
-      // Only use Gemini search enhancement when we don't have a clear title/DOI
-      try {
-        const queries = await this.gemini.generateSearchQueries(ref.rawText);
-        if (queries) {
-          enhancedRef = {
-            ...ref,
-            // Use Gemini's extracted title if we don't have one
-            title: ref.title || queries.title_query || undefined,
-          };
-          logger.debug(`Gemini enhanced search: "${queries.combined_query?.substring(0, 50)}..."`);
-        }
-      } catch {
-        // Gemini enhancement is optional — continue with original ref
-      }
-    }
-
     // Run all integrations in parallel (tolerate individual failures)
     const results = await Promise.allSettled(
-      this.clients.map((client) => client.validateReference(enhancedRef))
+      this.clients.map((client) => client.validateReference(ref))
     );
 
     const sources: IntegrationResult[] = results
