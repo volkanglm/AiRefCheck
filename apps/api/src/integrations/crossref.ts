@@ -20,6 +20,7 @@ interface CrossRefWork {
   page?: string;
   score?: number;
   URL: string;
+  type?: string;
 }
 
 interface CrossRefResponse {
@@ -121,9 +122,9 @@ export class CrossRefClient extends BaseApiClient {
   private async searchByTitle(title: string, authorHint?: string): Promise<CrossRefWork[]> {
     try {
       const params: Record<string, string> = {
-        query: title.substring(0, 200),
+        "query.bibliographic": title.substring(0, 200),
         rows: "5",
-        select: "DOI,title,author,published-print,published-online,container-title,score",
+        select: "DOI,title,author,published-print,published-online,container-title,score,type",
       };
       if (authorHint) params["query.author"] = authorHint;
 
@@ -163,22 +164,28 @@ export class CrossRefClient extends BaseApiClient {
       score += ref.year === workYear ? 15 : (Math.abs(ref.year - workYear) <= 2 ? 8 : 0);
     }
 
-    // DOI match (20%)
+    // DOI match (25%)
     if (ref.doi && work.DOI && ref.doi.toLowerCase() === work.DOI.toLowerCase()) {
-      score += 20;
+      score += 25;
     }
 
-    // Author match (20%)
+    // Author match (15%)
     if (ref.authors?.length && work.author?.length) {
       const refLastNames = ref.authors.map((a) => a.last_name.toLowerCase());
       const workLastNames = work.author.map((a) => (a.family || "").toLowerCase());
       const matches = refLastNames.filter((n) => workLastNames.some((w) => w.includes(n) || n.includes(w)));
-      score += (matches.length / refLastNames.length) * 20;
+      score += (matches.length / refLastNames.length) * 15;
     }
 
-    // Journal match (5%)
-    if (ref.journal && work["container-title"]?.[0]) {
-      score += this.titleSimilarity(ref.journal, work["container-title"][0]) * 5;
+    // Container (journal/book) match (5%)
+    const containerTitle = work["container-title"]?.[0] || "";
+    if (ref.journal && containerTitle) {
+      score += this.titleSimilarity(ref.journal, containerTitle) * 5;
+    }
+
+    // Bonus: if rawText contains "In" (book chapter) and work is book-chapter type
+    if (ref.rawText?.includes("In ") && work.type?.includes("book")) {
+      score += 10;
     }
 
     return Math.min(score, 100);

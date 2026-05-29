@@ -122,19 +122,74 @@ function extractBibliographySection(fullText: string): string[] {
 
 /**
  * Merge multi-line reference entries into single strings.
- * A new reference typically starts with patterns like:
- * - "Lastname, F." or "Lastname, F. M."
- * - "[1]" or "1." (numbered)
- * - A year in parentheses after author names
+ * Uses heuristic rules to determine when a line starts a new reference
+ * vs continues the previous one.
  */
 function mergeRefLines(bibText: string): string[] {
   const lines = bibText.split("\n").map((l) => l.trim());
 
-  // Pattern that matches the start of a new reference
-  const newRefStart = /^\s*(?:\[\d+\]\s*|\d+\.\s+)?[A-ZÀ-ÖØ-ÞŞĞÜÇİ][a-zà-öø-ÿşğüçı]+(?:\s+[A-ZÀ-ÖØ-ÞŞĞÜÇİ]|\.|,|\s*&|\s+ve|\s+and)/;
-  // Also match: numbered references like [1] or 1.
-  const numberedRef = /^\s*\[\d+\]\s*/;
-  const dottedRef = /^\s*\d+\.\s+/;
+  // Lines that are CLEARLY continuations (never start a new ref):
+  // - Start with "In " (book chapter indicator: "In EditorName (Ed.), BookTitle")
+  // - Start with "pp." (page numbers)
+  // - Start with a city/location name followed by publisher
+  // - Start with just a journal name + volume pattern
+  // - Start with "Retrieved from", "https://", "doi:", "http://"
+  // - Start with "et al", "etc."
+  // - Are all uppercase (journal name continuation)
+  // - Contain only page ranges like "123-145."
+  const continuationIndicators = [
+    /^In\s+[A-Z]/,                 // "In EditorName (Ed.), BookTitle"  
+    /^pp\.\s/i,                    // "pp. 123-145"
+    /^\d+\s*[-–]\s*\d+\s*\.?\s*$/, // Just page range "123-145."
+    /^[A-Z][a-z]+:\s/,             // "New York: Publisher" or "London: Routledge"
+    /^Retrieved\s/i,               // "Retrieved from..."
+    /^https?:\/\//i,               // URLs
+    /^doi:\s*/i,                    // "doi: 10.xxx"
+    /^et\s+al/i,                   // "et al."
+    /^\*\*/,                       // Bold markers
+  ];
+
+  // A new reference typically starts with:
+  // - Author pattern: "Lastname, F." or "Lastname, F. M.,"
+  // - Multiple authors: "Lastname, F., & Othername, G."
+  // - Corporate author: "American Psychiatric Association"
+  // - Numbered: "[1]" or "1."
+  function isNewReference(line: string): boolean {
+    // Skip very short lines
+    if (line.length < 15) return false;
+
+    // Numbered references
+    if (/^\s*\[\d+\]\s*/.test(line)) return true;
+    if (/^\s*\d{1,3}\.\s+[A-Z]/.test(line)) return true;
+
+    // Must start with uppercase letter
+    if (!/^[A-ZÀ-ÖØ-ÞŞĞÜÇİ]/.test(line)) return false;
+
+    // Check if it looks like continuation first
+    for (const pattern of continuationIndicators) {
+      if (pattern.test(line)) return false;
+    }
+
+    // Journal name + volume pattern (NOT a new ref):
+    // "Journal of Psychology, 45, 123-145."
+    // "Child and Adolescent Psychiatry, 34, 168-179."
+    if (/^[A-Z][a-z].+,\s*\d+,\s*\d+\s*[-–]/.test(line)) return false;
+    // "Behavioral Science, 23, 300-317."
+    if (/^[A-Z][a-z]+\s+[A-Z][a-z]+,\s*\d+,\s*\d+/.test(line)) return false;
+
+    // Just a journal + volume, no year pattern
+    if (/^[A-Z][a-z]+.*,\s*\d+,\s*\d+\s*[-–−]/.test(line)) return false;
+
+    // Author-like pattern: "Lastname," or "Lastname, F." at the start
+    // This is the core check: does the line start with an author name?
+    const authorPattern = /^[A-ZÀ-ÖØ-ÞŞĞÜÇİ][a-zà-öø-ÿşğüçı']+\s*[,.]/;
+    const corporateAuthor = /^[A-Z][a-z]+(\s+[A-Z][a-z]+){1,4}\s*[\(.]/;
+    
+    if (authorPattern.test(line)) return true;
+    if (corporateAuthor.test(line)) return true;
+
+    return false;
+  }
 
   const references: string[] = [];
   let current = "";
@@ -142,13 +197,10 @@ function mergeRefLines(bibText: string): string[] {
   for (const line of lines) {
     if (line.length < 3) continue;
 
-    const startsNewRef = numberedRef.test(line) || dottedRef.test(line) || newRefStart.test(line);
-
-    if (startsNewRef && current.length > 0) {
+    if (isNewReference(line) && current.length > 0) {
       references.push(current.trim());
       current = line;
-    } else if (line.length > 15) {
-      // Continuation of current reference or start of a new one
+    } else if (line.length > 10) {
       if (current.length === 0) {
         current = line;
       } else {
