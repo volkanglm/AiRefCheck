@@ -72,6 +72,15 @@ const API_KEY_CONFIG = [
     guideUrl: "https://rapidapi.com/HuriUsma/api/project-gutenberg-free-books-api1",
     guideText: "RapidAPI'den ücretsiz hesap oluşturun. Project Gutenberg Free Books API'ye abone olun (Free plan mevcut). API key otomatik verilur.",
   },
+  {
+    key: "GEMINI_API_KEY",
+    label: "Google Gemini API (Yapay Zeka Destekli)",
+    description: "Gemini AI ile düşük kaliteli referansların yeniden ayrıştırılması ve arama optimizasyonu. Regex'in başarısız olduğu durumlarda devreye girer.",
+    placeholder: "AIza...",
+    required: false,
+    guideUrl: "https://aistudio.google.com/apikey",
+    guideText: "Google AI Studio'dan ücretsiz API key oluşturun. Gemini 2.0 Flash modeli kullanılır. Ücretsiz katman: dakikada 15 istek, günde 1500 istek.",
+  },
 ];
 
 export async function settingsRoutes(fastify: FastifyInstance) {

@@ -97,7 +97,7 @@ export function startValidationWorker() {
 
         // Calculate overall score
         const total = references.length;
-        const overallScore = total > 0 ? Math.round((verified * 100 + partial * 50) / total) : 0;
+        const overallScore = total > 0 ? Math.round(((verified * 100) + (partial * 65)) / total) : 0;
 
         await prisma.analysis.update({
           where: { id: analysisId },

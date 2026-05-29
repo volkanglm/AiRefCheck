@@ -14,6 +14,7 @@ import { OrcidClient } from "./orcid";
 import { SpringerClient } from "./springer";
 import { PlosClient } from "./plos";
 import { GutenbergClient } from "./gutenberg";
+import { GeminiService } from "./gemini-service";
 import { logger } from "../lib/logger";
 
 export interface PipelineResult {
@@ -27,6 +28,7 @@ export interface PipelineResult {
 
 export class ValidatorPipeline {
   private clients: BaseApiClient[];
+  private gemini: GeminiService;
 
   constructor(redis: Redis) {
     this.clients = [
@@ -40,6 +42,7 @@ export class ValidatorPipeline {
       new PlosClient(redis),
       new GutenbergClient(redis),
     ];
+    this.gemini = new GeminiService();
   }
 
   async validate(ref: ParsedRef): Promise<PipelineResult> {
@@ -53,9 +56,28 @@ export class ValidatorPipeline {
       return knownResult;
     }
 
+    // Use Gemini to enhance search queries (non-blocking — runs in parallel)
+    let enhancedRef = ref;
+    if (this.gemini.isEnabled() && !ref.title && !ref.doi) {
+      // Only use Gemini search enhancement when we don't have a clear title/DOI
+      try {
+        const queries = await this.gemini.generateSearchQueries(ref.rawText);
+        if (queries) {
+          enhancedRef = {
+            ...ref,
+            // Use Gemini's extracted title if we don't have one
+            title: ref.title || queries.title_query || undefined,
+          };
+          logger.debug(`Gemini enhanced search: "${queries.combined_query?.substring(0, 50)}..."`);
+        }
+      } catch {
+        // Gemini enhancement is optional — continue with original ref
+      }
+    }
+
     // Run all integrations in parallel (tolerate individual failures)
     const results = await Promise.allSettled(
-      this.clients.map((client) => client.validateReference(ref))
+      this.clients.map((client) => client.validateReference(enhancedRef))
     );
 
     const sources: IntegrationResult[] = results
@@ -92,29 +114,37 @@ export class ValidatorPipeline {
 
     const confidenceScore = totalWeight > 0 ? Math.round(weightedScore / totalWeight) : 0;
 
-    // Determine status
+    // ─── STATUS LOGIC ───
+    // 1. If ANY source found it → VERIFIED
+    //    (One reliable academic database is sufficient to confirm a reference exists)
+    // 2. If any partial match → PARTIAL_MATCH
+    //    (Title/author partially matched but not enough for full verification)
+    // 3. If all sources returned errors → SUSPICIOUS
+    //    (Can't verify due to API failures — don't penalize)
+    // 4. Otherwise → NOT_FOUND
+    //    (Genuinely can't find this reference in any database)
+
     let status: PipelineResult["status"];
-    if (found.length >= 2 || (found.length >= 1 && confidenceScore >= 70)) {
+
+    if (found.length >= 1) {
+      // At least one reliable source found it — VERIFIED
       status = "verified";
-    } else if (found.length >= 1 || partial.length >= 2 || (found.length >= 1 && partial.length >= 1)) {
-      status = "partial_match";
-    } else if (notFound.length > 0 && errors.length === sources.length) {
-      // All sources errored (rate limit, network) — don't mark as not_found
-      status = "suspicious";
-    } else if (notFound.length === sources.length && sources.length > 0) {
-      status = "not_found";
     } else if (partial.length >= 1) {
+      // Partial match in at least one source
       status = "partial_match";
+    } else if (errors.length > 0 && errors.length === sources.length) {
+      // All sources errored — can't determine, mark suspicious
+      status = "suspicious";
     } else {
+      // No source found it, no partial match
       status = "not_found";
     }
 
-    // Best match
-    const best = sources
-      .filter((s) => s.status === "found" || s.status === "partial_match")
+    // Best match — prefer "found" results, then partial
+    const best = [...found, ...partial]
       .sort((a, b) => b.confidenceScore - a.confidenceScore)[0];
 
-    logger.info(`Validation complete: ${status} (score: ${confidenceScore}, ${totalTime}ms)`);
+    logger.info(`Validation: ${status} (score: ${confidenceScore}, found: ${found.length}, partial: ${partial.length}, nf: ${notFound.length}, err: ${errors.length}, ${totalTime}ms)`);
 
     return {
       referenceId: "",

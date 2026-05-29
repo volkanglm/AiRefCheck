@@ -12,6 +12,7 @@ import axios from "axios";
 import { PrismaClient } from "@prisma/client";
 import { env } from "../lib/env";
 import { logger } from "../lib/logger";
+import { GeminiService } from "../integrations/gemini-service";
 
 const prisma = new PrismaClient();
 
@@ -279,6 +280,55 @@ export function startParseWorker() {
 
         if (!parsed_references || parsed_references.length === 0) {
           throw new Error("Referans ayrıştırma başarısız — hiçbir referans bulunamadı");
+        }
+
+        // ─── Gemini AI Enhancement ───
+        // For references with low parse confidence (< 0.5), use Gemini to re-parse
+        const gemini = new GeminiService();
+        let geminiEnhanced = 0;
+
+        if (gemini.isEnabled()) {
+          const weakRefs = parsed_references
+            .map((ref: any, idx: number) => ({ ref, idx }))
+            .filter((item: any) => !item.ref.title || (item.ref.parse_confidence || 0) < 0.5);
+
+          if (weakRefs.length > 0) {
+            logger.info(`Gemini: Re-parsing ${weakRefs.length} low-confidence references`);
+
+            // Process in batches of 10
+            for (let b = 0; b < weakRefs.length; b += 10) {
+              const batch = weakRefs.slice(b, b + 10);
+              const rawBatch = batch.map((item: any) => item.ref.raw_text || "");
+              const geminiResults = await gemini.batchParseReferences(rawBatch);
+
+              for (const item of batch) {
+                const gRef = geminiResults.get(item.idx - weakRefs[0].idx);
+                if (gRef && gRef.confidence > (parsed_references[item.idx].parse_confidence || 0)) {
+                  // Gemini parsed better — merge results
+                  const original = parsed_references[item.idx];
+                  parsed_references[item.idx] = {
+                    ...original,
+                    title: gRef.title || original.title,
+                    authors: gRef.authors || original.authors,
+                    year: gRef.year || original.year,
+                    journal: gRef.journal || original.journal,
+                    book_title: gRef.book_title || original.book_title,
+                    publisher: gRef.publisher || original.publisher,
+                    volume: gRef.volume || original.volume,
+                    issue: gRef.issue || original.issue,
+                    pages: gRef.pages || original.pages,
+                    doi: gRef.doi || original.doi,
+                    url: gRef.url || original.url,
+                    type: gRef.ref_type || original.type,
+                    parse_confidence: Math.max(gRef.confidence, original.parse_confidence || 0),
+                  };
+                  geminiEnhanced++;
+                }
+              }
+            }
+
+            logger.info(`Gemini enhanced ${geminiEnhanced}/${weakRefs.length} weak references`);
+          }
         }
 
         // Save parsed references to DB
