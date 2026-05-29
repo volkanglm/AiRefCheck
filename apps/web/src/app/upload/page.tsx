@@ -1,54 +1,81 @@
 /**
  * AiRefCheck - Upload Page
+ * Single flow: select file → upload → auto-start analysis → redirect
  */
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, FileText, CheckCircle, AlertCircle } from "lucide-react";
+import { Upload, FileText, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AppShell } from "@/components/app-shell";
-import { api } from "@/lib/api";
 
-const ACCEPTED = {
-  "application/pdf": [".pdf"],
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
-  "text/plain": [".txt"],
-};
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
 
 export default function UploadPage() {
-  const [uploading, setUploading] = useState(false);
-  const [result, setResult] = useState<{ success: boolean; docId?: string; error?: string } | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [status, setStatus] = useState<"idle" | "uploading" | "starting" | "done" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
   const router = useRouter();
+
+  const getAuthHeaders = () => {
+    if (typeof window === "undefined") return {};
+    const token = localStorage.getItem("accessToken");
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) setSelectedFile(file);
-  };
-
-  const handleUpload = async () => {
-    if (!selectedFile) return;
-    setUploading(true);
-    setResult(null);
-    try {
-      const res = await api.upload<{ id: string }>("/documents/upload", selectedFile);
-      setResult({ success: true, docId: res.data?.id });
-    } catch (err: any) {
-      setResult({ success: false, error: err.message });
-    } finally {
-      setUploading(false);
+    if (file) {
+      setSelectedFile(file);
+      setStatus("idle");
+      setErrorMsg("");
     }
   };
 
-  const startAnalysis = async () => {
-    if (!result?.docId) return;
+  const startFullFlow = async () => {
+    if (!selectedFile) return;
+
     try {
-      const res = await api.post<{ id: string }>("/analyses", { documentId: result.docId });
-      if (res.data?.id) router.push(`/analysis/${res.data.id}`);
+      // Step 1: Upload
+      setStatus("uploading");
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+
+      const uploadRes = await fetch(`${API_URL}/documents/upload`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: formData,
+      });
+
+      const uploadData = await uploadRes.json();
+      if (!uploadData.success || !uploadData.data?.id) {
+        throw new Error(uploadData.error?.message || "Dosya yükleme başarısız");
+      }
+
+      const docId = uploadData.data.id;
+
+      // Step 2: Create analysis
+      setStatus("starting");
+      const analysisRes = await fetch(`${API_URL}/analyses`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ documentId: docId }),
+      });
+
+      const analysisData = await analysisRes.json();
+      if (!analysisData.success || !analysisData.data?.id) {
+        throw new Error(analysisData.error?.message || "Analiz oluşturma başarısız");
+      }
+
+      // Step 3: Redirect to analysis page
+      setStatus("done");
+      router.push(`/analysis/${analysisData.data.id}`);
+
     } catch (err: any) {
-      setResult({ success: false, error: err.message });
+      setStatus("error");
+      setErrorMsg(err.message || "Beklenmeyen bir hata oluştu");
     }
   };
 
@@ -58,11 +85,12 @@ export default function UploadPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Upload className="h-5 w-5" /> Doküman Yükle
+              <Upload className="h-5 w-5" /> Doküman Yükle &amp; Analiz Et
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center gap-4">
+            {/* File Input */}
+            <div>
               <input
                 type="file"
                 accept=".pdf,.docx,.txt"
@@ -71,44 +99,54 @@ export default function UploadPage() {
               />
             </div>
 
-            {selectedFile && !result?.success && (
-              <div className="flex items-center gap-3 rounded-lg border p-3">
-                <FileText className="h-8 w-8 text-slate-400" />
-                <div>
+            {/* Selected File Info */}
+            {selectedFile && (
+              <div className="flex items-center gap-3 rounded-lg border p-4">
+                <FileText className="h-10 w-10 text-blue-500" />
+                <div className="flex-1">
                   <p className="font-medium text-slate-700">{selectedFile.name}</p>
                   <p className="text-sm text-slate-500">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
                 </div>
-                <Button className="ml-auto" onClick={handleUpload} disabled={uploading}>
-                  {uploading ? "Yükleniyor..." : "Yükle"}
+                <Button
+                  onClick={startFullFlow}
+                  disabled={status === "uploading" || status === "starting"}
+                  size="lg"
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {status === "uploading" && (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Yükleniyor...</>
+                  )}
+                  {status === "starting" && (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analiz Başlatılıyor...</>
+                  )}
+                  {status === "idle" && "Analizi Başlat"}
+                  {status === "done" && (
+                    <><CheckCircle className="mr-2 h-4 w-4" /> Yönlendiriliyor...</>
+                  )}
+                  {status === "error" && "Tekrar Dene"}
                 </Button>
               </div>
             )}
 
-            {uploading && (
-              <div className="flex items-center gap-2 text-blue-600">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
-                Dosya yükleniyor...
+            {/* Status Messages */}
+            {status === "uploading" && (
+              <div className="flex items-center gap-2 rounded-lg bg-blue-50 p-3 text-blue-700">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Dosya sunucuya yükleniyor...</span>
               </div>
             )}
 
-            {result?.success && (
-              <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-                <div className="flex items-center gap-2 text-green-700">
-                  <CheckCircle className="h-5 w-5" />
-                  <span className="font-medium">Dosya başarıyla yüklendi!</span>
-                </div>
-                <Button className="mt-3" onClick={startAnalysis}>
-                  Analizi Başlat
-                </Button>
+            {status === "starting" && (
+              <div className="flex items-center gap-2 rounded-lg bg-blue-50 p-3 text-blue-700">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Referanslar ayrıştırılıyor, analiz başlatılıyor...</span>
               </div>
             )}
 
-            {result?.error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-                <div className="flex items-center gap-2 text-red-700">
-                  <AlertCircle className="h-5 w-5" />
-                  <span>{result.error}</span>
-                </div>
+            {status === "error" && errorMsg && (
+              <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+                <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                <span>{errorMsg}</span>
               </div>
             )}
           </CardContent>
