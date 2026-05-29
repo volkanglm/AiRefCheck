@@ -14,6 +14,11 @@ import { env } from "../lib/env";
 import { logger } from "../lib/logger";
 import { GeminiService } from "../integrations/gemini-service";
 
+/** Minimum characters for a reference line to be considered valid. */
+const MIN_REF_LENGTH = 10;
+/** Maximum characters per reference line sent to NLP. */
+const MAX_REF_LENGTH = 2000;
+
 const prisma = new PrismaClient();
 
 interface ParseJobData {
@@ -217,6 +222,52 @@ function mergeRefLines(bibText: string): string[] {
   return references.filter((r) => r.length > 20);
 }
 
+/**
+ * Sanitize reference lines before sending to NLP service.
+ *
+ * PDF extraction can produce:
+ * - Empty/whitespace-only strings
+ * - Strings shorter than meaningful content
+ * - Extremely long merged strings (> 10K chars) that cause regex backtracking in NLP parsers
+ * - Non-printable control characters (\x00-\x1F, \x7F) from corrupt PDF encodings
+ * - PDF internal artifacts like "(cid:NN)"
+ * - Unicode replacement characters (\uFFFD) from failed decoding
+ */
+function sanitizeRefLines(lines: string[]): string[] {
+  const sanitized: string[] = [];
+
+  for (const raw of lines) {
+    // Strip PDF (cid:NN) artifacts
+    let cleaned = raw.replace(/\(cid:\d+\)/g, "");
+
+    // Remove non-printable control characters (keep \t, \n, \r as they'll be collapsed later)
+    cleaned = cleaned.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+
+    // Remove Unicode replacement characters
+    cleaned = cleaned.replace(/\uFFFD/g, "");
+
+    // Collapse whitespace sequences into single spaces
+    cleaned = cleaned.replace(/\s+/g, " ").trim();
+
+    // Skip if too short after cleaning
+    if (cleaned.length < MIN_REF_LENGTH) {
+      continue;
+    }
+
+    // Truncate extremely long strings to prevent regex backtracking in NLP parsers
+    if (cleaned.length > MAX_REF_LENGTH) {
+      logger.warn(
+        `Truncating reference line from ${cleaned.length} to ${MAX_REF_LENGTH} chars`,
+      );
+      cleaned = cleaned.substring(0, MAX_REF_LENGTH);
+    }
+
+    sanitized.push(cleaned);
+  }
+
+  return sanitized;
+}
+
 export function startParseWorker() {
   const connection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
 
@@ -261,18 +312,59 @@ export function startParseWorker() {
         const refLines = extractBibliographySection(fullText);
         logger.info(`Found ${refLines.length} candidate reference lines`);
 
-        if (refLines.length === 0) {
+        // Sanitize reference lines before sending to NLP
+        const sanitizedRefs = sanitizeRefLines(refLines);
+        logger.info(
+          `After sanitization: ${sanitizedRefs.length} valid references (filtered ${refLines.length - sanitizedRefs.length})`,
+        );
+
+        if (sanitizedRefs.length === 0) {
           throw new Error("Dokümanda referans/kaynakça bölümü bulunamadı");
         }
 
         await job.updateProgress(40);
 
         // Call NLP service for parsing
+        const refsToParse = sanitizedRefs.slice(0, 500);
+        logger.info(
+          `Sending ${refsToParse.length} references to NLP (total payload ~${JSON.stringify({ references: refsToParse }).length} bytes)`,
+        );
+
         const nlpResponse = await axios.post(
           `${env.NLP_SERVICE_URL}/api/v1/parse`,
-          { references: refLines.slice(0, 500) },
+          { references: refsToParse },
           { timeout: 120000 },
-        );
+        ).catch((err) => {
+          if (err.response) {
+            // NLP returned an error response (4xx/5xx) — log the body for diagnosis
+            const status = err.response.status;
+            const body = typeof err.response.data === "string"
+              ? err.response.data.substring(0, 500)
+              : JSON.stringify(err.response.data).substring(0, 500);
+            logger.error(`NLP service error ${status}: ${body}`, {
+              refsSent: refsToParse.length,
+              sampleRef: refsToParse[0]?.substring(0, 100),
+            });
+            throw new Error(
+              `NLP servisi ${status} hatası döndürdü: ${body}`,
+            );
+          }
+          if (err.code === "ECONNABORTED") {
+            logger.error("NLP service request timed out", {
+              refsSent: refsToParse.length,
+              timeout: 120000,
+            });
+            throw new Error(
+              "NLP servisi zaman aşımına uğradı — referanslar çok karmaşık veya çok büyük olabilir",
+            );
+          }
+          if (err.code === "ECONNREFUSED") {
+            logger.error("NLP service connection refused");
+            throw new Error("NLP servisine bağlanılamadı — servis çalışmıyor olabilir");
+          }
+          logger.error(`NLP request failed: ${err.message}`, { code: err.code });
+          throw err;
+        });
 
         const { parsed_references, detected_style, style_confidence } = nlpResponse.data;
         logger.info(`NLP parsed: ${parsed_references?.length || 0} refs, style=${detected_style}, conf=${style_confidence}`);

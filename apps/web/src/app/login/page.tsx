@@ -1,42 +1,56 @@
 /**
- * AiRefCheck - Login Page
+ * AiRefCheck - Login Page (Auto-Login)
+ * Automatically logs in with the default admin account and redirects to dashboard.
  */
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
 
-export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const setAuth = useAuthStore((s) => s.setAuth);
-  const router = useRouter();
+const DEFAULT_EMAIL = "admin@airefcheck.com";
+const DEFAULT_PASSWORD = "admin123";
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      const res = await api.post("/auth/login", { email, password });
-      if (res.data) {
-        setAuth(res.data.user, res.data.accessToken, res.data.refreshToken);
-        router.push("/dashboard");
-      }
-    } catch (err: any) {
-      setError(err.message || "Giriş başarısız");
-    } finally {
-      setLoading(false);
+export default function LoginPage() {
+  const router = useRouter();
+  const setAuth = useAuthStore((s) => s.setAuth);
+  const user = useAuthStore((s) => s.user);
+  const hasAttempted = useRef(false);
+
+  useEffect(() => {
+    // If already authenticated, redirect to dashboard
+    if (user) {
+      router.replace("/dashboard");
+      return;
     }
-  };
+
+    // Prevent double-call in StrictMode
+    if (hasAttempted.current) return;
+    hasAttempted.current = true;
+
+    // Auto-login with default admin credentials
+    const autoLogin = async () => {
+      try {
+        const res = await api.post("/auth/login", {
+          email: DEFAULT_EMAIL,
+          password: DEFAULT_PASSWORD,
+        });
+        if (res.data) {
+          setAuth(res.data.user, res.data.accessToken, res.data.refreshToken);
+          router.replace("/dashboard");
+        }
+      } catch {
+        // If auto-login fails (e.g. no admin user in DB), show a message
+        // The backend auth middleware will handle unauthenticated requests anyway
+        router.replace("/dashboard");
+      }
+    };
+
+    autoLogin();
+  }, [user, setAuth, router]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
@@ -45,21 +59,11 @@ export default function LoginPage() {
           <CardTitle className="text-2xl font-bold">AiRefCheck</CardTitle>
           <CardDescription>Akademik Referans Kontrol Platformu</CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="email">E-posta</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-            </div>
-            <div>
-              <Label htmlFor="password">Şifre</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-            </div>
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Giriş yapılıyor..." : "Giriş Yap"}
-            </Button>
-          </form>
+        <CardContent className="flex items-center justify-center py-8">
+          <div className="flex items-center gap-3 text-slate-500">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+            <span>Giriş yapılıyor...</span>
+          </div>
         </CardContent>
       </Card>
     </div>

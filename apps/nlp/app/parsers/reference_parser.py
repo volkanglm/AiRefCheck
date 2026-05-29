@@ -3,7 +3,12 @@ AiRefCheck NLP - Reference Parser Engine
 Routes references to style-specific parsers.
 """
 
+import re
 import uuid
+import traceback
+
+import structlog
+
 from app.models.types import CitationStyle, ParsedReference
 from app.parsers.patterns.apa import APA7Parser, APA6Parser
 from app.parsers.patterns.ieee import IEEEParser
@@ -18,6 +23,8 @@ from app.parsers.patterns.ama_acs_cse_asa_apsa import (
     ASA7Parser,
     APSA7Parser,
 )
+
+logger = structlog.get_logger()
 
 
 class ReferenceParser:
@@ -51,12 +58,28 @@ class ReferenceParser:
         return self._generic_parse(text)
 
     def parse_batch(self, references: list[str], style: CitationStyle) -> list[ParsedReference]:
-        """Parse a batch of references."""
-        return [self.parse(ref, style) for ref in references]
+        """Parse a batch of references.
+
+        Each reference is parsed individually so that a single failure
+        does not crash the entire batch.  Failed references are returned
+        as low-confidence fallback parses with a warning.
+        """
+        results: list[ParsedReference] = []
+        for idx, ref in enumerate(references):
+            try:
+                results.append(self.parse(ref, style))
+            except Exception as exc:
+                logger.warning(
+                    "parse_batch: individual ref failed, using fallback",
+                    index=idx,
+                    error=str(exc),
+                    ref_preview=ref[:80],
+                )
+                results.append(self._error_fallback(ref, exc))
+        return results
 
     def _generic_parse(self, text: str) -> ParsedReference:
         """Fallback parser for unknown styles."""
-        import re
         year_match = re.search(r"\b((?:19|20)\d{2})\b", text)
         doi_match = re.search(r"(?:10\.\d{4,}/[^\s]+)", text)
 
@@ -68,4 +91,16 @@ class ReferenceParser:
             parse_confidence=0.1,
             style=CitationStyle.UNKNOWN,
             warnings=["Unknown citation style - partial parse only"],
+        )
+
+    def _error_fallback(self, text: str, exc: Exception) -> ParsedReference:
+        """Create a minimal fallback result when a parser crashes."""
+        year_match = re.search(r"\b((?:19|20)\d{2})\b", text)
+        return ParsedReference(
+            id=str(uuid.uuid4()),
+            raw_text=text[:2000],  # Cap stored text length
+            year=int(year_match.group(1)) if year_match else None,
+            parse_confidence=0.05,
+            style=CitationStyle.UNKNOWN,
+            warnings=[f"Parser error: {exc!s}"],
         )
