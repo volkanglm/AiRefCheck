@@ -11,4 +11,5 @@ export { ArxivClient } from "./arxiv";
 export { OrcidClient } from "./orcid";
 export { SpringerClient } from "./springer";
 export { PlosClient } from "./plos";
+export { GutenbergClient } from "./gutenberg";
 export { ValidatorPipeline, PipelineResult } from "./validator-pipeline";

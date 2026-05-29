@@ -63,6 +63,15 @@ const API_KEY_CONFIG = [
     guideUrl: "https://api.plos.org/",
     guideText: "Ücretsiz API anahtarı. https://api.plos.org/ adresinden kayıt olun. Dakikada 10 istek limiti.",
   },
+  {
+    key: "GUTENBERG_RAPIDAPI_KEY",
+    label: "Project Gutenberg API (RapidAPI)",
+    description: "70.000+ telifsiz klasik kitap arşivi. Klasik eserlerin doğrulanması için.",
+    placeholder: "xxxxxxxxxxxx...",
+    required: false,
+    guideUrl: "https://rapidapi.com/HuriUsma/api/project-gutenberg-free-books-api1",
+    guideText: "RapidAPI'den ücretsiz hesap oluşturun. Project Gutenberg Free Books API'ye abone olun (Free plan mevcut). API key otomatik verilur.",
+  },
 ];
 
 export async function settingsRoutes(fastify: FastifyInstance) {

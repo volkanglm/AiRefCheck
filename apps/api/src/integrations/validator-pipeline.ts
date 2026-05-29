@@ -13,6 +13,7 @@ import { ArxivClient } from "./arxiv";
 import { OrcidClient } from "./orcid";
 import { SpringerClient } from "./springer";
 import { PlosClient } from "./plos";
+import { GutenbergClient } from "./gutenberg";
 import { logger } from "../lib/logger";
 
 export interface PipelineResult {
@@ -37,6 +38,7 @@ export class ValidatorPipeline {
       new OrcidClient(redis),
       new SpringerClient(redis),
       new PlosClient(redis),
+      new GutenbergClient(redis),
     ];
   }
 
