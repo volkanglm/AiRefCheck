@@ -14,8 +14,9 @@ const DEFAULT_USER_EMAIL = "admin@airefcheck.com";
 export async function authMiddleware(request: FastifyRequest, reply: FastifyReply) {
   try {
     const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      // No-login mode: auto-assign default admin user
+
+    // No-login mode: if no token at all, auto-assign default admin user
+    if (!authHeader || !authHeader.startsWith("Bearer ") || authHeader.substring(7).trim() === "") {
       const prisma = (request.server as any).prisma;
       const defaultUser = await prisma.user.findUnique({ where: { email: DEFAULT_USER_EMAIL } });
 
@@ -28,7 +29,6 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
         return;
       }
 
-      // Fallback: use first user in the database
       const firstUser = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
       if (firstUser) {
         (request as any).user = {
@@ -43,18 +43,36 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
       throw new UnauthorizedError("Token bulunamadı");
     }
 
+    // Token provided — verify it
     const token = authHeader.substring(7);
-    const payload = await verifyToken(token);
-
-    // Attach user info to request
-    (request as any).user = {
-      userId: payload.userId,
-      email: payload.email,
-      role: payload.role,
-    };
+    try {
+      const payload = await verifyToken(token);
+      (request as any).user = {
+        userId: payload.userId,
+        email: payload.email,
+        role: payload.role,
+      };
+    } catch (jwtError) {
+      // Token expired/invalid — fall back to no-login mode instead of rejecting
+      logger.warn(`JWT verification failed, falling back to no-login: ${jwtError}`);
+      const prisma = (request.server as any).prisma;
+      const defaultUser = await prisma.user.findUnique({ where: { email: DEFAULT_USER_EMAIL } });
+      if (defaultUser) {
+        (request as any).user = {
+          userId: defaultUser.id,
+          email: defaultUser.email,
+          role: defaultUser.role,
+        };
+      } else {
+        const firstUser = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
+        if (firstUser) {
+          (request as any).user = { userId: firstUser.id, email: firstUser.email, role: firstUser.role };
+        }
+      }
+    }
   } catch (error) {
     if (error instanceof UnauthorizedError) throw error;
-    logger.warn(`Auth failed: ${error}`);
+    logger.warn(`Auth error: ${error}`);
     throw new UnauthorizedError("Geçersiz veya süresi dolmuş token");
   }
 }
