@@ -79,3 +79,5 @@ docker/logs/
 .cache/
 temp/
 tmp/
+docs/.Rhistory
+.github/
