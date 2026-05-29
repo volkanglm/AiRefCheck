@@ -1,0 +1,9 @@
+Wang, J., Zhang, L., Chen, X., Li, M., & Liu, H. (2022). Multi-task learning for natural language understanding. Journal of Machine Learning Research, 23(1), 1-25.
+
+Liu, Y., Zhang, Q., Wang, Z., Chen, Y., & Huang, X. (2021). Cross-modal representation learning for vision and language. Proceedings of the IEEE, 109(5), 825-850. https://doi.org/10.1109/JPROC.2021.3060598
+
+Zhang, H., Wang, Y., Li, J., Chen, S., Liu, M., & Yang, K. (2020). Graph neural networks for social network analysis. ACM Computing Surveys, 53(3), 1-35. https://doi.org/10.1145/3389434
+
+Chen, W., Liu, Y., Wang, J., Zhang, Q., & Zhou, Z. (2019). Efficient transformer-based models for sequence modeling. Advances in Neural Information Processing Systems, 32, 1234-1247.
+
+Zhao, L., Wang, J., Zhang, Y., Li, H., Chen, X., & Yang, M. (2018). Distributed machine learning for large-scale data. IEEE Transactions on Knowledge and Data Engineering, 30(12), 2251-2268. https://doi.org/10.1109/TKDE.2018.2836862

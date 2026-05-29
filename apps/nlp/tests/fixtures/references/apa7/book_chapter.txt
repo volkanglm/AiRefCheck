@@ -1,0 +1,9 @@
+Vasquez, M., & Chen, H. (2022). Deep learning for medical imaging. In A. Kumar & B. Singh (Eds.), Medical image analysis: Methods and applications (pp. 145-189). Academic Press. https://doi.org/10.1016/B978-0-12-816-176-0.00012-3
+
+Zhang, Y., & Rodriguez, A. (2021). Neural networks for natural language processing. In J. Smith (Ed.), Handbook of computational linguistics (pp. 302-345). Springer. https://doi.org/10.1007/978-3-030-02158-0_12
+
+Brown, P. F., Cocke, J., Della Pietra, S. A., Della Pietra, V. J., Jelinek, F., Mercer, R. L., & Roossin, P. S. (1990). A statistical approach to language translation. In Proceedings of the 12th conference on computational linguistics (pp. 587-594). Association for Computational Linguistics.
+
+Robinson, A., & Chung, S. (2019). Machine learning in healthcare. In H. Zhang (Ed.), Healthcare data analytics (pp. 89-112). Wiley. https://doi.org/10.1002/9781119178974.ch5
+
+Kumar, R., & Singh, P. (2020). Big data analytics in healthcare. In S. Joshi (Ed.), Big data and cloud computing: Concepts and applications (pp. 201-234). CRC Press. https://doi.org/10.1201/9781315187008-8

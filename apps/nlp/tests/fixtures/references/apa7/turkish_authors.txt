@@ -1,0 +1,9 @@
+Yilmaz, O., & Demir, A. (2020). Turkiye'de yazilim gelistirme endustrisinin durumu. Bilgisayar Muhendisligi Dergisi, 15(2), 45-62.
+
+Cengiz, M. A., Kaya, F. R., & Ozturk, B. (2019). Yapay zeka algoritmalarinin Turkçe metin siniflandirmasinda kullanimi. Istanbul Universitesi Bilgisayar Bilimleri Dergisi, 8(1), 23-38.
+
+Acar, S., Gunes, H., & Yildirim, E. (2021). Derin ogrenme yontemleri ile akilli sistem tasarimi. Ankara Universitesi Mühendislik Fakültesi Dergisi, 36(4), 112-129.
+
+Karatas, L., Erdem, O., & Ozcan, P. (2018). Buyuk veri analitigi ve Turkiye uygulamalari. Ege Akademik Bakis, 18(3), 389-404.
+
+Kurt, M., Ince, N., & Yildiz, K. (2022). Otomatik metin isleme tekniklerinin Turk dili uzerinde degerlendirilmesi. Boğaziçi Universitesi Dergisi, 65(2), 78-95.

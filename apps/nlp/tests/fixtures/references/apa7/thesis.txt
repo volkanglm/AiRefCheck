@@ -1,0 +1,5 @@
+Yilmaz, M. (2023). Artificial intelligence supported education systems: A case study in Turkish universities (Publication No. 123456) [Doctoral dissertation, Ankara University]. YOK Thesis Database.
+
+Ozturk, A. F. (2022). Deep learning approaches for Turkish named entity recognition (Publication No. 789012) [Doctoral dissertation, Hacettepe University]. YOK Thesis Database.
+
+Kaya, E. (2021). Machine learning applications in Turkish language processing [Master's thesis, Middle East Technical University]. METU Library Archive.

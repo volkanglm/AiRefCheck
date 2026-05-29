@@ -1,0 +1,17 @@
+Sutton, R. S., & Barto, A. G. (2018). Reinforcement learning: An introduction (2nd ed.). MIT Press.
+
+Goodfellow, I., Bengio, Y., & Courville, A. (2016). Deep learning. MIT Press.
+
+Russell, S., & Norvig, P. (2020). Artificial intelligence: A modern approach (4th ed.). Pearson.
+
+Bishop, C. M. (2006). Pattern recognition and machine learning. Springer.
+
+Mitchell, T. M. (1997). Machine learning. McGraw-Hill.
+
+Duda, R. O., Hart, P. E., & Stork, D. G. (2001). Pattern classification (2nd ed.). Wiley.
+
+Haykin, S. (2009). Neural networks and learning machines (3rd ed.). Pearson.
+
+Kahneman, D. (2011). Thinking, fast and slow. Farrar, Straus and Giroux.
+
+Turing, A. M. (1950). Computing machinery and intelligence. Mind, 59(236), 433-460.

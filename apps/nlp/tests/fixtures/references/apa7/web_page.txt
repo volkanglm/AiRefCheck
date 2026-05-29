@@ -1,0 +1,9 @@
+World Health Organization. (2023, March 15). Global health report 2023. https://www.who.int/health-topics/global-health
+
+OpenAI. (2024). GPT-4 technical report. https://openai.com/research/gpt-4
+
+European Commission. (2022, September). Digital education action plan 2021-2027. https://education.ec.europa.eu/
+
+Centers for Disease Control and Prevention. (2023, January). CDC guidelines for AI in healthcare. https://www.cdc.gov/
+
+National Institutes of Health. (2024). NIH data management and sharing policy. https://www.nih.gov/data-management
