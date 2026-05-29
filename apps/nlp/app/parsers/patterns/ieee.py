@@ -38,10 +38,11 @@ class IEEEParser:
     )
 
     # [1] A. Author, Book Title, Xth ed. Publisher, Year.
+    # Without edition: [1] A. Author, Book Title. Publisher, Year.
     BOOK_RE = re.compile(
         r"^\[(?P<num>\d+)\]\s*"
         r"(?P<authors>.+?),\s*"
-        r"(?P<title>[^.]+),\s*"
+        r"(?P<title>[^.,]+)[.,]\s*"
         r"(?:(?P<edition>\d+\w+\s+ed\.)\s*)?"
         r"(?P<publisher>[^,]+),\s*"
         r"(?P<year>\d{4})\.?",
@@ -83,23 +84,37 @@ class IEEEParser:
         )
 
     def _parse_authors(self, text: str) -> list[Author]:
-        """Parse IEEE authors: 'A. A. Smith and B. C. Johnson'"""
+        """Parse IEEE authors: 'A. A. Smith, B. C. Jones, and D. Lee'"""
         if not text:
             return []
 
+        # Normalize ", and " to " and " so comma-separated authors stay together
+        text = re.sub(r",\s+and\s+", " and ", text)
         parts = re.split(r"\s+and\s+", text)
-        authors = []
+
+        authors: list[Author] = []
         for part in parts:
-            part = part.strip()
-            # IEEE: "A. A. Smith" → initials first, then last name
-            tokens = part.split()
-            if len(tokens) >= 2:
-                # Last token is last name, rest are initials
-                last = tokens[-1]
-                first = " ".join(tokens[:-1])
-                authors.append(Author(last_name=last, first_name=first))
-            elif tokens:
-                authors.append(Author(last_name=tokens[0]))
+            part = part.strip().rstrip(",")
+            if not part:
+                continue
+            # IEEE can have multiple "I. LastName" separated by commas
+            # e.g. "A. Smith, B. Jones" from "A. Smith, B. Jones, and C. Lee"
+            if "," in part:
+                sub_parts = [s.strip() for s in part.split(",")]
+            else:
+                sub_parts = [part]
+
+            for sp in sub_parts:
+                sp = sp.strip()
+                if not sp:
+                    continue
+                tokens = sp.split()
+                if len(tokens) >= 2:
+                    last = tokens[-1]
+                    first = " ".join(tokens[:-1])
+                    authors.append(Author(last_name=last, first_name=first))
+                elif tokens:
+                    authors.append(Author(last_name=tokens[0]))
         return authors
 
     def _partial_parse(self, text: str) -> ParsedReference:

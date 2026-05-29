@@ -13,8 +13,8 @@ class HarvardParser:
         r"^(?P<authors>.+?)\s*\((?P<year>\d{4})\)\s*"
         r"'(?P<title>[^']+)',?\s*"
         r"(?P<journal>[^,]+),\s*"
-        r"(?P<volume>\d+)\((?P<issue>[^)]+)\),\s*"
-        r"pp\.\s*(?P<pages>[\d]+(?:-[\d]+)?)\.?",
+        r"(?P<volume>\d+)(?:\((?P<issue>[^)]+)\))?,?\s*"
+        r"(?:pp\.\s*)?(?P<pages>[\d]+(?:-[\d]+)?)\.?",
         re.DOTALL,
     )
 
@@ -49,15 +49,24 @@ class HarvardParser:
 
     def _parse_authors(self, text):
         text = text.strip().rstrip(".")
-        parts = re.split(r"\s+and\s+|\s*&\s*", text)
+        text = re.sub(r"\s+and\s+", " & ", text)
+        parts = re.split(r"\s*&\s*", text)
         authors = []
         for p in parts:
             p = p.strip()
-            if "," in p:
-                last, first = p.split(",", 1)
-                authors.append(Author(last_name=last.strip(), first_name=first.strip()))
-            else:
-                authors.append(Author(last_name=p))
+            if not p:
+                continue
+            comma_parts = [s.strip() for s in p.split(",")]
+            i = 0
+            while i < len(comma_parts):
+                if i + 1 < len(comma_parts):
+                    last = comma_parts[i]
+                    first = comma_parts[i + 1]
+                    authors.append(Author(last_name=last, first_name=first))
+                    i += 2
+                else:
+                    authors.append(Author(last_name=comma_parts[i]))
+                    i += 1
         return authors
 
     def _partial_parse(self, text):

@@ -21,15 +21,38 @@ def _parse_vancouver_authors(text: str) -> list[Author]:
 
 
 def _parse_apa_authors(text: str) -> list[Author]:
-    parts = re.split(r"\s*[&]\s*|\s+and\s+", text.strip().rstrip("."))
+    text = text.strip().rstrip(".")
+    # Normalize ", and " to " and "
+    text = re.sub(r",\s+and\s+", " and ", text)
+    parts = re.split(r"\s*[&]\s*|\s+and\s+", text)
     authors = []
     for p in parts:
         p = p.strip()
+        if not p:
+            continue
         if "," in p:
-            last, first = p.split(",", 1)
-            authors.append(Author(last_name=last.strip(), first_name=first.strip()))
+            comma_parts = [s.strip() for s in p.split(",")]
+            # First two comma-parts are "Last, First" of the first author
+            if len(comma_parts) >= 2:
+                authors.append(Author(last_name=comma_parts[0], first_name=comma_parts[1]))
+                # Remaining parts are additional authors in "FirstName LastName" format
+                for cp in comma_parts[2:]:
+                    cp = cp.strip()
+                    if cp:
+                        tokens = cp.split()
+                        if len(tokens) >= 2:
+                            authors.append(Author(last_name=tokens[-1], first_name=" ".join(tokens[:-1])))
+                        else:
+                            authors.append(Author(last_name=cp))
+            else:
+                authors.append(Author(last_name=p))
         else:
-            authors.append(Author(last_name=p))
+            # "First Last" format
+            tokens = p.split()
+            if len(tokens) >= 2:
+                authors.append(Author(last_name=tokens[-1], first_name=" ".join(tokens[:-1])))
+            else:
+                authors.append(Author(last_name=p))
     return authors
 
 
@@ -37,7 +60,7 @@ class AMA11Parser:
     """AMA 11th: Author AA. Title. Journal. Year;Vol(Issue):Pages."""
     JOURNAL_RE = re.compile(
         r"^(?P<authors>[^.]+)\.\s*(?P<title>[^.]+)\.\s*"
-        r"(?P<journal>[^.]+)\.\s*(?P<year>\d{4});(?P<volume>\d+)\((?P<issue>[^)]+)\):(?P<pages>[\d]+(?:-[\d]+)?)\.?"
+        r"(?P<journal>.+?)\.\s*(?P<year>\d{4});(?P<volume>\d+)(?:\((?P<issue>[^)]+)\))?:\s*(?P<pages>[\d]+(?:-[\d]+)?)\.?"
     )
 
     def parse(self, text):
@@ -120,8 +143,8 @@ class ASA7Parser:
     """ASA 7th: Author, A. A. Year. "Title." Journal Vol(Issue):Pages."""
     JOURNAL_RE = re.compile(
         r"^(?P<authors>.+?)\s*(?P<year>\d{4})\.\s*"
-        r'"(?P<title>[^"]+)"\.\s*'
-        r"(?P<journal>[^\s]+)\s+(?P<volume>\d+)\((?P<issue>[^)]+)\):(?P<pages>[\d]+(?:-[\d]+)?)\.?"
+        r'"(?P<title>[^"]+)"(?:\.)?\s+'
+        r"(?P<journal>.+?)\s+(?P<volume>\d+)\((?P<issue>[^)]+)\):(?P<pages>[\d]+(?:-[\d]+)?)\.?\s*$"
     )
 
     def parse(self, text):
@@ -149,7 +172,7 @@ class APSA7Parser:
     """APSA 7th: Similar to ASA/APA format."""
     JOURNAL_RE = re.compile(
         r"^(?P<authors>.+?)\s*\((?P<year>\d{4})\)\.\s*"
-        r'"(?P<title>[^"]+)"\.\s*'
+        r'"(?P<title>[^"]+)"(?:\.)?\s+'
         r"(?P<journal>[^,]+),\s*(?P<volume>\d+)\((?P<issue>[^)]+)\),\s*"
         r"(?P<pages>[\d]+(?:-[\d]+)?)\.?",
         re.DOTALL,

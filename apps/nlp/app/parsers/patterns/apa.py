@@ -37,7 +37,7 @@ class APA7Parser:
     CHAPTER_RE = re.compile(
         r"^(?P<authors>.+?)\s*\((?P<year>\d{4})\)\.\s*"
         r"(?P<title>[^.]+)\.\s*"
-        r"In\s+(?P<editors>[^,(]+(?:,\s*[^,]+)*),?\s*(?:\(Ed[s.]?\))?,?\s*"
+        r"In\s+(?P<editors>[^,(]+(?:,\s*[^,]+)*),?\s*(?:\(Eds?\.?\))?,?\s*"
         r"(?P<book_title>[^(]+)\((?:pp\.\s*)?(?P<pages>[\d]+(?:-[\d]+)?)\)\.\s*"
         r"(?P<publisher>[^.]+)\.",
         re.DOTALL,
@@ -51,11 +51,11 @@ class APA7Parser:
         re.DOTALL,
     )
 
-    # APA7 Web: Author or Org. (Year, Month Day). Title. Site. URL
+    # APA7 Web: Author or Org. (Year, Month Day). Title. [Site. ]URL
     WEB_RE = re.compile(
         r"^(?P<authors>.+?)\s*\((?P<year>\d{4})(?:,\s*\w+(?:\s+\d+)?)?\)\.\s*"
         r"(?P<title>[^.]+)\.\s*"
-        r"(?P<site>[^.]+)\.\s*"
+        r"(?:\s*(?P<site>(?!https?://)[^.]+)\.\s*)?"
         r"(?P<url>https?://[^\s]+)$",
         re.DOTALL,
     )
@@ -84,8 +84,8 @@ class APA7Parser:
         authors = self._parse_authors(m.group("authors"))
         year = int(m.group("year")) if m.group("year") else None
         title = (m.group("title") or "").strip().rstrip(".")
-        doi = m.group("doi")
-        url = m.group("url") if "url" in m.groupdict() else None
+        doi = m.groupdict().get("doi")
+        url = m.groupdict().get("url")
 
         result = ParsedReference(
             id=str(uuid.uuid4()),
@@ -112,11 +112,11 @@ class APA7Parser:
         return result
 
     def _thesis_extra(self, ref: ParsedReference, m: re.Match) -> ParsedReference:
-        thesis_type = m.group("thesis_type", "")
+        thesis_type = m.groupdict().get("thesis_type", "")
         if "doctoral" in thesis_type.lower() or "doktora" in thesis_type.lower():
             ref.type = ReferenceType.DISSERTATION
         ref.metadata["thesis_type"] = thesis_type
-        ref.metadata["institution"] = m.group("institution", "").strip()
+        ref.metadata["institution"] = m.groupdict().get("institution", "").strip()
         return ref
 
     def _parse_authors(self, text: str) -> list[Author]:

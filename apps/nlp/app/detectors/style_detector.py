@@ -16,7 +16,8 @@ class StyleDetector:
             "starts_with_bracket": r"^\[\d+\]",
             "vol_no_pp": r"vol\.\s*\d+",
             "quoted_title": r'"[^"]+",',
-            "weight": 3.0,
+            "comma_after_quote": r'",\s*[A-Z]',
+            "weight": 5.0,
         },
         CitationStyle.VANCOUVER: {
             "starts_with_dot_num": r"^\d+\.\s",
@@ -36,7 +37,7 @@ class StyleDetector:
             "weight": 1.5,
         },
         CitationStyle.MLA9: {
-            "quoted_title": r'"[^"]+"\.?',
+            "quoted_title": r'"[^"]+"\.',
             "vol_no_pp": r"vol\.\s*\d+.*?no\.\s*\d+",
             "pp_period": r"pp\.\s*\d+",
             "weight": 2.5,

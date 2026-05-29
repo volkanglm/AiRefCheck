@@ -18,7 +18,7 @@ class VancouverParser:
         r"(?P<authors>[^.]+)\.\s*"
         r"(?P<title>[^.]+)\.\s*"
         r"(?P<journal>[^.]+)\.\s*"
-        r"(?P<year>\d{4});(?P<volume>\d+)\((?P<issue>[^)]+)\):(?P<pages>[\d]+(?:-[\d]+)?)\.?",
+        r"(?P<year>\d{4});(?P<volume>\d+)(?:\((?P<issue>[^)]+)\))?:\s*(?P<pages>[\d]+(?:-[\d]+)?)\.?",
         re.DOTALL,
     )
 

@@ -13,8 +13,8 @@ class MLA9Parser:
     """MLA 9th Edition reference parser."""
 
     JOURNAL_RE = re.compile(
-        r"^(?P<authors>[^.]+)\.\s*"
-        r'"(?P<title>[^"]+)"\.\s*'
+        r"^(?P<authors>.+?)\.\s*"
+        r'"(?P<title>[^"]+)"\.?\s*'
         r"(?P<journal>[^,]+),\s*"
         r"vol\.\s*(?P<volume>\d+),\s*"
         r"no\.\s*(?P<issue>\d+),\s*"
@@ -24,10 +24,10 @@ class MLA9Parser:
     )
 
     BOOK_RE = re.compile(
-        r"^(?P<authors>[^.]+)\.\s*"
-        r"(?P<title>[^.]+)\.\s*"
+        r"^(?P<authors>.+)\.\s+"
+        r"(?P<title>.+)\.\s+"
         r"(?P<publisher>[^,]+),\s*"
-        r"(?P<year>\d{4})\.?",
+        r"(?P<year>\d{4})\.?\s*$",
         re.DOTALL,
     )
 
@@ -70,7 +70,13 @@ class MLA9Parser:
                 last, first = part.split(",", 1)
                 authors.append(Author(last_name=last.strip(), first_name=first.strip()))
             else:
-                authors.append(Author(last_name=part))
+                tokens = part.split()
+                if len(tokens) >= 2:
+                    authors.append(
+                        Author(last_name=tokens[-1], first_name=" ".join(tokens[:-1]))
+                    )
+                else:
+                    authors.append(Author(last_name=part))
         return authors
 
     def _partial_parse(self, text: str) -> ParsedReference:

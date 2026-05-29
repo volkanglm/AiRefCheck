@@ -256,8 +256,6 @@ class TurkishNameHandler:
 
         # Clean up first name
         if first_name:
-            first_name = first_name.strip(".")
-            # Handle multiple initials like "A. F."
             first_name = re.sub(r"\s+", " ", first_name)
 
         return Author(

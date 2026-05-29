@@ -64,7 +64,7 @@ class ReferenceParser:
             id=str(uuid.uuid4()),
             raw_text=text,
             year=int(year_match.group(1)) if year_match else None,
-            doi=doi_match.group(1) if doi_match else None,
+            doi=doi_match.group(0) if doi_match else None,
             parse_confidence=0.1,
             style=CitationStyle.UNKNOWN,
             warnings=["Unknown citation style - partial parse only"],
