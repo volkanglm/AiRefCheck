@@ -8,13 +8,14 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import {
-  CheckCircle2, AlertTriangle, XCircle, Info, Clock, Filter, ArrowUpDown,
+  CheckCircle2, AlertTriangle, XCircle, Info, Clock, Filter,
   ExternalLink, ChevronDown, ChevronUp, Loader2,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AppShell } from "@/components/app-shell";
 import { api } from "@/lib/api";
 import { useAnalysisStore } from "@/stores/analysis-store";
 import type { Analysis, Reference, Validation } from "@airefcheck/shared";
@@ -122,6 +123,7 @@ export default function AnalysisPage() {
   };
 
   return (
+    <AppShell>
     <div className="space-y-6">
       {/* Progress Banner */}
       {isInProgress && (
@@ -318,5 +320,6 @@ export default function AnalysisPage() {
         })}
       </div>
     </div>
+    </AppShell>
   );
 }

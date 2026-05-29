@@ -1,25 +1,17 @@
 /**
- * AiRefCheck - Dashboard Layout with Sidebar
+ * AiRefCheck - App Shell with Sidebar
+ * Used as client wrapper for dashboard pages.
  */
-
 "use client";
 
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  LayoutDashboard,
-  Upload,
-  FileText,
-  BarChart3,
-  Settings,
-  LogOut,
-  Menu,
-  X,
-  CheckCircle2,
+  LayoutDashboard, Upload, FileText, BarChart3, Settings,
+  LogOut, Menu, X, CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { useAuthStore } from "@/stores/auth-store";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +23,7 @@ const NAV_ITEMS = [
   { href: "/settings", label: "Ayarlar", icon: Settings },
 ];
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
@@ -44,19 +36,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen bg-slate-50">
-      {/* Mobile overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
-      {/* Sidebar */}
-      <aside
-        className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-white transition-transform lg:static lg:translate-x-0",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        )}
-      >
-        {/* Logo */}
+      <aside className={cn(
+        "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-white transition-transform lg:static lg:translate-x-0",
+        sidebarOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
         <div className="flex h-16 items-center gap-2 border-b px-6">
           <CheckCircle2 className="h-6 w-6 text-blue-600" />
           <span className="text-lg font-bold text-slate-900">AiRefCheck</span>
@@ -65,10 +52,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Button>
         </div>
 
-        {/* Nav */}
         <nav className="flex-1 space-y-1 p-4">
           {NAV_ITEMS.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
             return (
               <Link
                 key={item.href}
@@ -86,16 +72,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
         </nav>
 
-        {/* User */}
         <div className="border-t p-4">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
               {user?.firstName?.[0] || "U"}
             </div>
             <div className="flex-1 overflow-hidden">
-              <p className="truncate text-sm font-medium text-slate-900">
-                {user?.firstName} {user?.lastName}
-              </p>
+              <p className="truncate text-sm font-medium text-slate-900">{user?.firstName} {user?.lastName}</p>
               <p className="truncate text-xs text-slate-500">{user?.email}</p>
             </div>
             <Button variant="ghost" size="icon" onClick={handleLogout} title="Çıkış Yap">
@@ -105,19 +88,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      {/* Main */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Header */}
         <header className="flex h-16 items-center gap-4 border-b bg-white px-6">
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
           <h1 className="text-lg font-semibold text-slate-900">
-            {NAV_ITEMS.find((i) => i.href === pathname)?.label || "AiRefCheck"}
+            {NAV_ITEMS.find((i) => pathname === i.href || pathname.startsWith(i.href + "/"))?.label || "AiRefCheck"}
           </h1>
         </header>
-
-        {/* Content */}
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
     </div>
