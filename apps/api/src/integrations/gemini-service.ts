@@ -7,7 +7,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { logger } from "../lib/logger";
 
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = "gemini-2.5-flash";
 const MIN_API_KEY_LENGTH = 10;
 
 export interface GeminiParsedRef {
