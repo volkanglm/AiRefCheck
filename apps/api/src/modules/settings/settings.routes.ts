@@ -45,6 +45,24 @@ const API_KEY_CONFIG = [
     guideUrl: "https://docs.openalex.org/how-to-use-the-api/getting-started",
     guideText: "E-posta adresinizi API isteğinde parametre olarak gönderiyoruz. API anahtarı gerekmez, pool'a dahil olursunuz.",
   },
+  {
+    key: "SPRINGER_API_KEY",
+    label: "Springer Metadata API Anahtarı",
+    description: "Springer bilimsel yayınevi API anahtarı (5M+ makale, kitap, bölüm)",
+    placeholder: "xxxxxxxxxxxx...",
+    required: false,
+    guideUrl: "https://dev.springernature.com/",
+    guideText: "Ücretsiz API anahtarı. https://dev.springernature.com/ adresinden kayıt olun. Dakikada 100 istek limiti.",
+  },
+  {
+    key: "PLOS_API_KEY",
+    label: "PLoS Search API Anahtarı",
+    description: "PLOS (Public Library of Science) biyoloji ve tıp dergileri API anahtarı",
+    placeholder: "xxxxxxxxxxxx...",
+    required: false,
+    guideUrl: "https://api.plos.org/",
+    guideText: "Ücretsiz API anahtarı. https://api.plos.org/ adresinden kayıt olun. Dakikada 10 istek limiti.",
+  },
 ];
 
 export async function settingsRoutes(fastify: FastifyInstance) {
