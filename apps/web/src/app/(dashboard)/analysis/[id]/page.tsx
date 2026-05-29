@@ -53,6 +53,33 @@ export default function AnalysisPage() {
     load();
   }, [id]);
 
+  // Auto-refresh while analysis is in progress
+  useEffect(() => {
+    if (!analysis) return;
+    const terminalStates = ["COMPLETED", "FAILED"];
+    if (terminalStates.includes(analysis.status)) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const [analysisRes, refsRes] = await Promise.all([
+          api.get<Analysis>(`/analyses/${id}`),
+          api.get<Reference[]>(`/analyses/${id}/references`),
+        ]);
+        const newAnalysis = analysisRes.data || null;
+        setAnalysis(newAnalysis);
+        setReferences((refsRes.data || []).map((r: any) => ({ ...r, expanded: false })));
+
+        if (newAnalysis && terminalStates.includes(newAnalysis.status)) {
+          clearInterval(interval);
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [id, analysis?.status]);
+
   const score = analysis?.overallScore ?? 0;
   const scoreColor = score >= 80 ? "text-green-600" : score >= 50 ? "text-amber-600" : "text-red-600";
   const scoreStroke = score >= 80 ? "#16a34a" : score >= 50 ? "#d97706" : "#dc2626";
@@ -79,8 +106,56 @@ export default function AnalysisPage() {
     return <div className="py-12 text-center text-slate-500">Analiz bulunamadı.</div>;
   }
 
+  // Show progress while analysis is running
+  const isInProgress = !["COMPLETED", "FAILED"].includes(analysis.status);
+
+  const STATUS_LABELS: Record<string, string> = {
+    PENDING: "Beklemede",
+    EXTRACTING_REFERENCES: "Referanslar Çıkarılıyor...",
+    DETECTING_STYLE: "Atıf Stili Tespit Ediliyor...",
+    VALIDATING: "Referanslar Doğrulanıyor...",
+    DETECTING_FABRICATION: "Sahte Referanslar Tespit Ediliyor...",
+    MATCHING_CITATIONS: "Atıflar Eşleştiriliyor...",
+    GENERATING_REPORT: "Rapor Oluşturuluyor...",
+    COMPLETED: "Tamamlandı",
+    FAILED: "Başarısız",
+  };
+
   return (
     <div className="space-y-6">
+      {/* Progress Banner */}
+      {isInProgress && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="flex items-center gap-4 p-4">
+            <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+            <div className="flex-1">
+              <p className="font-medium text-blue-800">
+                {STATUS_LABELS[analysis.status] || analysis.status}
+              </p>
+              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-blue-200">
+                <div
+                  className="h-2 rounded-full bg-blue-600 transition-all duration-500"
+                  style={{ width: `${analysis.progress || 0}%` }}
+                />
+              </div>
+              <p className="mt-1 text-xs text-blue-600">Sayfa otomatik olarak güncellenecek...</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Error Banner */}
+      {analysis.status === "FAILED" && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-red-700">
+              <XCircle className="h-5 w-5" />
+              <span className="font-medium">Analiz Başarısız</span>
+            </div>
+            <p className="mt-2 text-sm text-red-600">{analysis.errorMessage || "Bilinmeyen bir hata oluştu."}</p>
+          </CardContent>
+        </Card>
+      )}
       {/* Header with Score */}
       <div className="flex flex-col gap-6 md:flex-row md:items-start">
         {/* Score Circle */}

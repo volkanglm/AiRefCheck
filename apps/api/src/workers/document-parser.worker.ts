@@ -1,9 +1,10 @@
 /**
  * AiRefCheck - Document Parse Worker
  * Processes uploaded documents: extract text, send to NLP, save results.
+ * Supports PDF, DOCX, TXT, LaTeX, BibTeX formats.
  */
 
-import { Worker, Job } from "bullmq";
+import { Worker, Job, Queue } from "bullmq";
 import Redis from "ioredis";
 import { readFile } from "fs/promises";
 import path from "path";
@@ -19,6 +20,72 @@ interface ParseJobData {
   documentId: string;
 }
 
+/**
+ * Extract text from various document formats.
+ */
+async function extractText(filePath: string, format: string): Promise<string> {
+  const buffer = await readFile(filePath);
+
+  switch (format) {
+    case "PDF": {
+      const pdfParse = (await import("pdf-parse")).default;
+      const pdfData = await pdfParse(buffer);
+      return pdfData.text;
+    }
+    case "DOCX": {
+      const mammoth = (await import("mammoth")).default;
+      const result = await mammoth.extractRawText({ buffer });
+      return result.value;
+    }
+    case "TXT":
+    case "LATEX":
+    case "BIBTEX":
+    case "RIS":
+      return buffer.toString("utf-8");
+    default:
+      // Fallback: try as text
+      return buffer.toString("utf-8");
+  }
+}
+
+/**
+ * Find the bibliography/references section in extracted text.
+ * Looks for common section headers in Turkish and English.
+ */
+function extractBibliographySection(fullText: string): string[] {
+  const patterns = [
+    /(?:^|\n)\s*(?:kaynakça|kaynaklar|referanslar|kullanılan kaynaklar|bibliyografya)\s*\n/i,
+    /(?:^|\n)\s*(?:references|bibliography|works cited|literatur(?:e|verzeichnis))\s*\n/i,
+    /(?:^|\n)\s*(?:kaynak(?:ça|lar))\s*(?:\n|$)/i,
+    /(?:^|\n)\s*\d*\.?\s*(?:references|bibliography)\s*(?:\n|$)/i,
+  ];
+
+  let startIndex = -1;
+  for (const pattern of patterns) {
+    const match = fullText.match(pattern);
+    if (match && match.index !== undefined) {
+      startIndex = match.index + match[0].length;
+      break;
+    }
+  }
+
+  // If no bibliography section found, use the last 40% of the document
+  if (startIndex === -1) {
+    const lines = fullText.split("\n");
+    const cutPoint = Math.floor(lines.length * 0.6);
+    const tailLines = lines.slice(cutPoint);
+    return tailLines
+      .map((l) => l.trim())
+      .filter((l) => l.length > 20);
+  }
+
+  const bibText = fullText.substring(startIndex);
+  return bibText
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 15);
+}
+
 export function startParseWorker() {
   const connection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
 
@@ -26,45 +93,74 @@ export function startParseWorker() {
     "document-parse",
     async (job: Job<ParseJobData>) => {
       const { analysisId, documentId } = job.data;
-      logger.info(`Parse job started: analysis=${analysisId}`);
+      logger.info(`Parse job started: analysis=${analysisId}, document=${documentId}`);
 
       try {
         // Update status
-        await prisma.analysis.update({ where: { id: analysisId }, data: { status: "EXTRACTING_REFERENCES", progress: 10, startedAt: new Date() } });
+        await prisma.analysis.update({
+          where: { id: analysisId },
+          data: { status: "EXTRACTING_REFERENCES", progress: 10, startedAt: new Date() },
+        });
+        await job.updateProgress(10);
 
-        // Read file
+        // Get document metadata
         const doc = await prisma.document.findUnique({ where: { id: documentId } });
         if (!doc) throw new Error(`Document not found: ${documentId}`);
 
+        // Extract text from file
         const filePath = path.join(env.UPLOAD_DIR, doc.storedName);
-        const fileBuffer = await readFile(filePath);
-        const rawText = fileBuffer.toString("utf-8");
+        logger.info(`Extracting text from: ${filePath} (format: ${doc.format})`);
+
+        const fullText = await extractText(filePath, doc.format);
+        logger.info(`Text extracted: ${fullText.length} chars`);
 
         // Save raw text
-        await prisma.document.update({ where: { id: documentId }, data: { rawText, status: "PARSED" } });
+        await prisma.document.update({
+          where: { id: documentId },
+          data: { rawText: fullText, status: "PARSED" },
+        });
         await job.updateProgress(30);
 
-        // Send to NLP service for parsing
-        await prisma.analysis.update({ where: { id: analysisId }, data: { status: "DETECTING_STYLE", progress: 40 } });
+        // Find bibliography section
+        await prisma.analysis.update({
+          where: { id: analysisId },
+          data: { status: "DETECTING_STYLE", progress: 35 },
+        });
 
-        // Split raw text into reference-like chunks
-        const refLines = rawText
-          .split(/\n/)
-          .map((l) => l.trim())
-          .filter((l) => l.length > 20);
+        const refLines = extractBibliographySection(fullText);
+        logger.info(`Found ${refLines.length} candidate reference lines`);
 
-        // Call NLP service
-        const nlpResponse = await axios.post(`${env.NLP_SERVICE_URL}/api/v1/parse`, {
-          references: refLines.slice(0, 500),
-        }, { timeout: 60000 });
+        if (refLines.length === 0) {
+          throw new Error("Dokümanda referans/kaynakça bölümü bulunamadı");
+        }
+
+        await job.updateProgress(40);
+
+        // Call NLP service for parsing
+        const nlpResponse = await axios.post(
+          `${env.NLP_SERVICE_URL}/api/v1/parse`,
+          { references: refLines.slice(0, 500) },
+          { timeout: 120000 },
+        );
 
         const { parsed_references, detected_style, style_confidence } = nlpResponse.data;
+        logger.info(`NLP parsed: ${parsed_references?.length || 0} refs, style=${detected_style}, conf=${style_confidence}`);
         await job.updateProgress(70);
+
+        if (!parsed_references || parsed_references.length === 0) {
+          throw new Error("Referans ayrıştırma başarısız — hiçbir referans bulunamadı");
+        }
 
         // Save parsed references to DB
         await prisma.analysis.update({
           where: { id: analysisId },
-          data: { detectedStyle: detected_style, styleConfidence: style_confidence, status: "VALIDATING", progress: 75, totalReferences: parsed_references.length },
+          data: {
+            detectedStyle: detected_style,
+            styleConfidence: style_confidence,
+            status: "VALIDATING",
+            progress: 75,
+            totalReferences: parsed_references.length,
+          },
         });
 
         for (let i = 0; i < parsed_references.length; i++) {
@@ -73,38 +169,49 @@ export function startParseWorker() {
             data: {
               analysisId,
               orderIndex: i + 1,
-              rawText: ref.raw_text,
-              authors: ref.authors,
-              year: ref.year,
-              title: ref.title,
-              journal: ref.journal,
-              publisher: ref.publisher,
-              volume: ref.volume,
-              issue: ref.issue,
-              pages: ref.pages,
-              doi: ref.doi,
-              url: ref.url,
-              isbn: ref.isbn,
+              rawText: ref.raw_text || "",
+              authors: ref.authors || [],
+              year: ref.year || null,
+              title: ref.title || null,
+              journal: ref.journal || null,
+              publisher: ref.publisher || null,
+              volume: ref.volume || null,
+              issue: ref.issue || null,
+              pages: ref.pages || null,
+              doi: ref.doi || null,
+              url: ref.url || null,
+              isbn: ref.isbn || null,
               refType: ref.type || "JOURNAL_ARTICLE",
-              parseConfidence: ref.parse_confidence,
+              parseConfidence: ref.parse_confidence || null,
               status: "PENDING",
             },
           });
         }
 
         await job.updateProgress(90);
-        logger.info(`Parse job completed: ${parsed_references.length} references extracted`);
+
+        // Queue validation job
+        const validateQueue = new Queue("reference-validate", { connection: { connection: redis.duplicate() } });
+        await validateQueue.add("validate", { analysisId }, {
+          attempts: 2,
+          backoff: { type: "exponential", delay: 5000 },
+          timeout: 300000,
+        });
+
+        logger.info(`Parse job completed: ${parsed_references.length} references extracted, validation queued`);
       } catch (error: any) {
-        logger.error(`Parse job failed: ${error.message}`);
+        logger.error(`Parse job failed: ${error.message}`, { stack: error.stack });
         await prisma.analysis.update({
           where: { id: analysisId },
-          data: { status: "FAILED", errorMessage: error.message },
+          data: { status: "FAILED", errorMessage: error.message.substring(0, 500) },
         });
         throw error;
       }
     },
-    { connection, concurrency: 5 }
+    { connection, concurrency: 3 },
   );
+
+  const redis = connection;
 
   worker.on("completed", (job) => logger.info(`Parse job ${job.id} completed`));
   worker.on("failed", (job, err) => logger.error(`Parse job ${job?.id} failed: ${err.message}`));

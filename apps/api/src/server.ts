@@ -14,6 +14,8 @@ import Redis from "ioredis";
 import { logger } from "./lib/logger";
 import { registerRoutes } from "./routes";
 import { env } from "./lib/env";
+import { startParseWorker } from "./workers/document-parser.worker";
+import { startValidationWorker } from "./workers/reference-validator.worker";
 
 const prisma = new PrismaClient();
 const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: 3 });
@@ -72,6 +74,15 @@ async function start() {
     await fastify.listen({ port: env.APP_PORT, host: "0.0.0.0" });
     logger.info(`🚀 AiRefCheck API running on port ${env.APP_PORT}`);
     logger.info(`📡 Socket.io ready`);
+
+    // Start background workers
+    try {
+      startParseWorker();
+      startValidationWorker();
+      logger.info(`⚡ Background workers started`);
+    } catch (workerErr: any) {
+      logger.warn(`Worker start warning: ${workerErr.message}`);
+    }
   } catch (err) {
     logger.error("Failed to start server:", err);
     process.exit(1);
