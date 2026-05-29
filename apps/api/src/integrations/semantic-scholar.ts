@@ -48,16 +48,30 @@ export class SemanticScholarClient extends BaseApiClient {
       }
 
       // 2. Başlık ile arama
-      if (ref.title) {
+      if (ref.title && ref.title.length > 5) {
         const titleHash = ref.title.toLowerCase().replace(/\s+/g, "_").substring(0, 100);
         const cached = await this.getCached<IntegrationResult>(`title:${titleHash}`);
         if (cached) return { ...cached, fromCache: true };
 
         const papers = await this.searchByTitle(ref.title);
         if (papers.length > 0) {
-          const best = papers[0]; // already sorted by relevance
+          const best = papers[0];
           const ir = this.buildResult(ref, best, start);
           await this.setCache(`title:${titleHash}`, ir);
+          return ir;
+        }
+      }
+
+      // 3. rawText ile fallback arama
+      if (ref.rawText && ref.rawText.length > 20) {
+        const rawHash = ref.rawText.substring(0, 100).toLowerCase().replace(/\s+/g, "_");
+        const cached = await this.getCached<IntegrationResult>(`raw:${rawHash}`);
+        if (cached) return { ...cached, fromCache: true };
+
+        const papers = await this.searchByTitle(ref.rawText.substring(0, 200));
+        if (papers.length > 0) {
+          const ir = this.buildResult(ref, papers[0], start);
+          await this.setCache(`raw:${rawHash}`, ir);
           return ir;
         }
       }

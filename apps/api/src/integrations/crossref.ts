@@ -53,13 +53,15 @@ export class CrossRefClient extends BaseApiClient {
         }
       }
 
-      // 2. Başlık ile arama
-      if (ref.title) {
-        const titleHash = ref.title.toLowerCase().replace(/\s+/g, "_").substring(0, 100);
+      // 2. Başlık ile arama (title yoksa rawText'ten çıkar)
+      const searchTitle = ref.title || this.extractTitleFromRaw(ref.rawText);
+
+      if (searchTitle && searchTitle.length > 5) {
+        const titleHash = searchTitle.toLowerCase().replace(/\s+/g, "_").substring(0, 100);
         const cached = await this.getCached<IntegrationResult>(`title:${titleHash}`);
         if (cached) return { ...cached, fromCache: true };
 
-        const results = await this.searchByTitle(ref.title, ref.authors?.map((a) => a.last_name).join(" "));
+        const results = await this.searchByTitle(searchTitle, ref.authors?.map((a) => a.last_name).join(" "));
         if (results.length > 0) {
           const best = this.findBestMatch(ref, results);
           if (best) {
@@ -70,11 +72,41 @@ export class CrossRefClient extends BaseApiClient {
         }
       }
 
+      // 3. rawText ile arama (fallback)
+      if (ref.rawText && ref.rawText.length > 20) {
+        const rawHash = ref.rawText.substring(0, 100).toLowerCase().replace(/\s+/g, "_");
+        const cached = await this.getCached<IntegrationResult>(`raw:${rawHash}`);
+        if (cached) return { ...cached, fromCache: true };
+
+        const results = await this.searchByTitle(ref.rawText.substring(0, 200));
+        if (results.length > 0) {
+          const best = this.findBestMatch(ref, results);
+          if (best) {
+            const ir = this.buildResult(ref, best, start);
+            await this.setCache(`raw:${rawHash}`, ir);
+            return ir;
+          }
+        }
+      }
+
       return this.notFound(ref, Date.now() - start);
     } catch (error: any) {
       logger.error(`CrossRef error: ${error.message}`);
       return this.errorResult(ref, error.message, Date.now() - start);
     }
+  }
+
+  /**
+   * Extract title from raw reference text.
+   * Tries to find text after year pattern like (2020). and before the next period or journal name.
+   */
+  private extractTitleFromRaw(raw: string): string | null {
+    // Pattern: After (YEAR). or after YEAR. — the title follows
+    const match = raw.match(/\(\d{4}\)\s*\.?\s*(.+?)(?:\.\s|\.(?=\s*[A-Z])|$)/);
+    if (match && match[1] && match[1].length > 10) {
+      return match[1].trim();
+    }
+    return null;
   }
 
   private async searchByDoi(doi: string): Promise<CrossRefWork | null> {
