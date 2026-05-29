@@ -112,17 +112,56 @@ function extractBibliographySection(fullText: string): string[] {
   if (startIndex === -1) {
     const lines = fullText.split("\n");
     const cutPoint = Math.floor(lines.length * 0.6);
-    const tailLines = lines.slice(cutPoint);
-    return tailLines
-      .map((l) => l.trim())
-      .filter((l) => l.length > 20);
+    const bibText = lines.slice(cutPoint).join("\n");
+    return mergeRefLines(bibText);
   }
 
   const bibText = fullText.substring(startIndex);
-  return bibText
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 15);
+  return mergeRefLines(bibText);
+}
+
+/**
+ * Merge multi-line reference entries into single strings.
+ * A new reference typically starts with patterns like:
+ * - "Lastname, F." or "Lastname, F. M."
+ * - "[1]" or "1." (numbered)
+ * - A year in parentheses after author names
+ */
+function mergeRefLines(bibText: string): string[] {
+  const lines = bibText.split("\n").map((l) => l.trim());
+
+  // Pattern that matches the start of a new reference
+  const newRefStart = /^\s*(?:\[\d+\]\s*|\d+\.\s+)?[A-ZÀ-ÖØ-ÞŞĞÜÇİ][a-zà-öø-ÿşğüçı]+(?:\s+[A-ZÀ-ÖØ-ÞŞĞÜÇİ]|\.|,|\s*&|\s+ve|\s+and)/;
+  // Also match: numbered references like [1] or 1.
+  const numberedRef = /^\s*\[\d+\]\s*/;
+  const dottedRef = /^\s*\d+\.\s+/;
+
+  const references: string[] = [];
+  let current = "";
+
+  for (const line of lines) {
+    if (line.length < 3) continue;
+
+    const startsNewRef = numberedRef.test(line) || dottedRef.test(line) || newRefStart.test(line);
+
+    if (startsNewRef && current.length > 0) {
+      references.push(current.trim());
+      current = line;
+    } else if (line.length > 15) {
+      // Continuation of current reference or start of a new one
+      if (current.length === 0) {
+        current = line;
+      } else {
+        current += " " + line;
+      }
+    }
+  }
+
+  if (current.trim().length > 15) {
+    references.push(current.trim());
+  }
+
+  return references.filter((r) => r.length > 20);
 }
 
 export function startParseWorker() {
@@ -230,7 +269,7 @@ export function startParseWorker() {
         await job.updateProgress(90);
 
         // Queue validation job
-        const validateQueue = new Queue("reference-validate", { connection: { connection: redis.duplicate() } });
+        const validateQueue = new Queue("reference-validate", { connection });
         await validateQueue.add("validate", { analysisId }, {
           attempts: 2,
           backoff: { type: "exponential", delay: 5000 },
@@ -249,8 +288,6 @@ export function startParseWorker() {
     },
     { connection, concurrency: 3 },
   );
-
-  const redis = connection;
 
   worker.on("completed", (job) => logger.info(`Parse job ${job.id} completed`));
   worker.on("failed", (job, err) => logger.error(`Parse job ${job?.id} failed: ${err.message}`));
