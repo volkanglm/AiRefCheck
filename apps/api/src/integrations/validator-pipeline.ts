@@ -36,6 +36,13 @@ export class ValidatorPipeline {
     const start = Date.now();
     logger.info(`Validating reference: ${ref.title || ref.doi || ref.rawText.substring(0, 50)}...`);
 
+    // Check if this is a well-known reference (DSM, ICD, etc.)
+    const knownResult = this.checkWellKnown(ref);
+    if (knownResult) {
+      logger.info(`Recognized as well-known: ${ref.title}`);
+      return knownResult;
+    }
+
     // Run all integrations in parallel (tolerate individual failures)
     const results = await Promise.allSettled(
       this.clients.map((client) => client.validateReference(ref))
@@ -79,12 +86,17 @@ export class ValidatorPipeline {
     let status: PipelineResult["status"];
     if (found.length >= 2 || (found.length >= 1 && confidenceScore >= 70)) {
       status = "verified";
-    } else if (found.length >= 1 || partial.length >= 2) {
+    } else if (found.length >= 1 || partial.length >= 2 || (found.length >= 1 && partial.length >= 1)) {
       status = "partial_match";
-    } else if (notFound.length === sources.length) {
-      status = "not_found";
-    } else {
+    } else if (notFound.length > 0 && errors.length === sources.length) {
+      // All sources errored (rate limit, network) — don't mark as not_found
       status = "suspicious";
+    } else if (notFound.length === sources.length && sources.length > 0) {
+      status = "not_found";
+    } else if (partial.length >= 1) {
+      status = "partial_match";
+    } else {
+      status = "not_found";
     }
 
     // Best match
@@ -102,5 +114,58 @@ export class ValidatorPipeline {
       bestMatchSource: best?.source || null,
       sources,
     };
+  }
+
+  /**
+   * Check if reference matches a well-known work (DSM, ICD, etc.)
+   * These are universally recognized and should be auto-verified.
+   */
+  private checkWellKnown(ref: ParsedRef): PipelineResult | null {
+    const title = (ref.title || "").toLowerCase();
+    const raw = (ref.rawText || "").toLowerCase();
+
+    const wellKnown = [
+      // DSM versions
+      { pattern: /diagnostic\s+and\s+statistical\s+manual\s+of\s+mental\s+disorders/, name: "DSM", url: "https://www.psychiatry.org/psychiatrists/practice/dsm" },
+      { pattern: /dsm[- ]?(?:5|iv|iii|tr|5tr)/i, name: "DSM", url: "https://www.psychiatry.org/psychiatrists/practice/dsm" },
+      // ICD
+      { pattern: /international\s+classification\s+of\s+diseases/, name: "ICD (WHO)", url: "https://www.who.int/standards/classifications/classification-of-diseases" },
+      { pattern: /icd[- ]?(?:10|11)/i, name: "ICD (WHO)", url: "https://www.who.int/standards/classifications/classification-of-diseases" },
+      // Common style manuals
+      { pattern: /publication\s+manual\s+of\s+the\s+american\s+psychological\s+association/, name: "APA Publication Manual", url: "https://apastyle.apa.org/" },
+      { pattern: /apa\s+publication\s+manual/i, name: "APA Publication Manual", url: "https://apastyle.apa.org/" },
+      // Major textbooks
+      { pattern: /principles\s+of\s+neural\s+science/, name: "Principles of Neural Science (Kandel)", url: "https://www.mheducation.com/highered/product/principles-neural-science-kandel/M9781259642236.html" },
+      { pattern: /harrison.{0,5}s?\s+principles\s+of\s+internal\s+medicine/, name: "Harrison's Principles of Internal Medicine", url: "https://accessmedicine.mhmedical.com/book.aspx?bookID=2129" },
+    ];
+
+    for (const wk of wellKnown) {
+      if (wk.pattern.test(title) || wk.pattern.test(raw)) {
+        return {
+          referenceId: "",
+          status: "verified",
+          confidenceScore: 95,
+          bestMatchUrl: wk.url,
+          bestMatchSource: "well_known",
+          sources: [{
+            source: "well_known",
+            sourceName: "Bilinen Kaynak",
+            status: "found",
+            confidenceScore: 95,
+            sourceUrl: wk.url,
+            sourceId: null,
+            matchedTitle: wk.name,
+            matchedAuthors: null,
+            matchedYear: ref.year,
+            matchedDoi: null,
+            metadata: { reason: "Well-known academic reference" },
+            responseTimeMs: 0,
+            fromCache: false,
+          }],
+        };
+      }
+    }
+
+    return null;
   }
 }

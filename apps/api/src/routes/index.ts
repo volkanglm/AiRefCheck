@@ -8,6 +8,7 @@ import { authRoutes } from "../modules/auth/auth.routes";
 import { documentRoutes } from "../modules/documents/document.routes";
 import { analysisRoutes } from "../modules/analyses/analysis.routes";
 import { reportRoutes } from "../modules/reports/report.routes";
+import { settingsRoutes } from "../modules/settings/settings.routes";
 import { AppError } from "../lib/errors";
 import { logger } from "../lib/logger";
 
@@ -48,4 +49,5 @@ export async function registerRoutes(fastify: FastifyInstance) {
   fastify.register(documentRoutes, { prefix: "/api/v1/documents" });
   fastify.register(analysisRoutes, { prefix: "/api/v1/analyses" });
   fastify.register(reportRoutes, { prefix: "/api/v1/reports" });
+  fastify.register(settingsRoutes, { prefix: "/api/v1/settings" });
 }
