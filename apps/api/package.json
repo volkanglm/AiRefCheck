@@ -20,7 +20,7 @@
     "@fastify/helmet": "^11.1.0",
     "@fastify/multipart": "^8.3.0",
     "@fastify/rate-limit": "^9.1.0",
-    "@fastify/static": "^7.2.0",
+    "@fastify/static": "^7.0.4",
     "@fastify/websocket": "^10.0.0",
     "socket.io": "^4.7.0",
     "bullmq": "^5.8.0",
@@ -35,6 +35,10 @@
     "bibtex-parse-js": "^0.0.24",
     "uuid": "^10.0.0",
     "dotenv": "^16.4.0"
+  },
+  "prisma": {
+    "schema": "../../prisma/schema.prisma",
+    "seed": "tsx ../../prisma/seed.ts"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
