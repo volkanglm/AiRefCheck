@@ -143,6 +143,8 @@ function mergeRefLines(bibText: string): string[] {
   // - Start with "et al", "etc."
   // - Are all uppercase (journal name continuation)
   // - Contain only page ranges like "123-145."
+  // - Start with connector words like "and", "&" (continuation of author list)
+  // - Start with editor pattern: "Hooks, & J. Aten (Eds.)"
   const continuationIndicators = [
     /^In\s+[A-Z]/,                 // "In EditorName (Ed.), BookTitle"  
     /^pp\.\s/i,                    // "pp. 123-145"
@@ -153,6 +155,8 @@ function mergeRefLines(bibText: string): string[] {
     /^doi:\s*/i,                    // "doi: 10.xxx"
     /^et\s+al/i,                   // "et al."
     /^\*\*/,                       // Bold markers
+    /^\d{4}\s*$/,                  // Just a year like "2013" or "2011"
+    /^\d{4}\s+[A-Z]/,              // "2013 Some Publisher" (year + publisher on new line)
   ];
 
   // A new reference typically starts with:
@@ -176,6 +180,23 @@ function mergeRefLines(bibText: string): string[] {
       if (pattern.test(line)) return false;
     }
 
+    // Lines starting with a name followed by ", &" are continuations
+    // e.g., "Hooks, & J. Aten (Eds.)," — this is part of an "In ..." block
+    if (/^[A-Z][a-z]+,\s*&\s*[A-Z]/.test(line)) return false;
+
+    // Lines that are clearly part of an "In (Eds.)," block continuation
+    // e.g., "Hooks, & J. Aten (Eds.),"
+    if (/\(Eds?\.\)/.test(line) && !/\(\d{4}\)/.test(line)) return false;
+
+    // Lines containing publisher-like patterns (City: Publisher or just Publisher)
+    // e.g., "American Psychological Association." at the end
+    // But only if they DON'T have a year in parentheses (which indicates a new ref)
+    if (/^[A-Z][a-z]+\s+[A-Z][a-z]+.*\.\s*$/.test(line) && !/\(\d{4}\)/.test(line) && !/\d{4};/.test(line)) {
+      // Looks like a publisher line — probably continuation
+      // e.g., "IVP Academic." or "American Psychological Association."
+      return false;
+    }
+
     // Journal name + volume pattern (NOT a new ref):
     // "Journal of Psychology, 45, 123-145."
     // "Child and Adolescent Psychiatry, 34, 168-179."
@@ -187,12 +208,26 @@ function mergeRefLines(bibText: string): string[] {
     if (/^[A-Z][a-z]+.*,\s*\d+,\s*\d+\s*[-–−]/.test(line)) return false;
 
     // Author-like pattern: "Lastname," or "Lastname, F." at the start
-    // This is the core check: does the line start with an author name?
+    // But also check that it has a year somewhere — a real reference
+    // should contain a year pattern like (2023) or , 2023.
     const authorPattern = /^[A-ZÀ-ÖØ-ÞŞĞÜÇİ][a-zà-öø-ÿşğüçı']+\s*[,.]/;
     const corporateAuthor = /^[A-Z][a-z]+(\s+[A-Z][a-z]+){1,4}\s*[\(.]/;
     
-    if (authorPattern.test(line)) return true;
-    if (corporateAuthor.test(line)) return true;
+    if (authorPattern.test(line)) {
+      // Has author-like start, but verify it looks like a FULL reference:
+      // Must contain a year (4 digits) somewhere in the line
+      if (/\b(?:19|20)\d{2}\b/.test(line)) return true;
+      // Or starts with a very clear author + title pattern
+      if (/^[A-Z][a-z]+,\s*[A-Z]\..*\.\s*[A-Z]/.test(line)) return true;
+      // Suspicious — might be a continuation like "Hooks, & J."
+      return false;
+    }
+
+    if (corporateAuthor.test(line)) {
+      // Corporate author — must have a year to be a real reference
+      if (/\b(?:19|20)\d{2}\b/.test(line)) return true;
+      return false;
+    }
 
     return false;
   }
