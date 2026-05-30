@@ -159,6 +159,18 @@ export class ValidatorPipeline {
       // Major textbooks
       { pattern: /principles\s+of\s+neural\s+science/, name: "Principles of Neural Science (Kandel)", url: "https://www.mheducation.com/highered/product/principles-neural-science-kandel/M9781259642236.html" },
       { pattern: /harrison.{0,5}s?\s+principles\s+of\s+internal\s+medicine/, name: "Harrison's Principles of Internal Medicine", url: "https://accessmedicine.mhmedical.com/book.aspx?bookID=2129" },
+      // Bowlby - Attachment and Loss (only match with author context)
+      { pattern: /bowlby.*attachment\s+and\s+loss/i, name: "Attachment and Loss (Bowlby, 1973/1980)", url: "https://www.basicbooks.com/" },
+      { pattern: /attachment\s+and\s+loss.*bowlby/i, name: "Attachment and Loss (Bowlby, 1973/1980)", url: "https://www.basicbooks.com/" },
+      // Kagitcibasi - Family and Human Development across Cultures (only match with author context)
+      { pattern: /kagitcibasi.*family.*human\s+development/i, name: "Family, Self and Human Development across Cultures (Kagitcibasi)", url: "https://www.routledge.com/" },
+      { pattern: /family.*self.*human\s+development\s+across\s+cultures.*kagitcibasi/i, name: "Family, Self and Human Development across Cultures (Kagitcibasi)", url: "https://www.routledge.com/" },
+      // Young - Schema Therapy: A Practitioner's Guide (only with specific title + author)
+      { pattern: /young.*schema\s+therapy.*practitioner/i, name: "Schema Therapy: A Practitioner's Guide (Young, Klosko, Weishaar, 2003)", url: "https://www.guilford.com/" },
+      { pattern: /schema\s+therapy.*practitioner.*young/i, name: "Schema Therapy: A Practitioner's Guide (Young, Klosko, Weishaar, 2003)", url: "https://www.guilford.com/" },
+      // Beck - Cognitive Therapy of Depression (only with specific title + author)
+      { pattern: /beck.*cognitive\s+(therapy|behavior\s+therapy)\s*(of|and)\s+depression/i, name: "Cognitive Therapy of Depression (Beck)", url: "https://www.guilford.com/" },
+      { pattern: /cognitive\s+(therapy|behavior\s+therapy)\s*(of|and)\s+depression.*beck/i, name: "Cognitive Therapy of Depression (Beck)", url: "https://www.guilford.com/" },
     ];
 
     for (const wk of wellKnown) {

@@ -444,14 +444,8 @@ function splitMergedReferences(text: string): string[] {
     //   - publisher: "Press." or "Erlbaum." etc
     //   - DOI: doi.org/xxx.
     //   - URL ending
-    if (beforeSplit.length > 30 && (
-      /\d{1,5}\s*[-–]\s*\d{1,5}\.\s*$/.test(beforeSplit) ||           // ends with pages
-      /\d{4}\)\.\s*$/.test(beforeSplit) ||                               // ends with (YYYY).
-      /\(\d{4}\)\.\s*$/.test(beforeSplit) ||                             // ends with (YYYY).
-      /doi\.org\/\S+\.?\s*$/.test(beforeSplit) ||                        // ends with DOI
-      /https?:\/\/\S+\.?\s*$/.test(beforeSplit) ||                       // ends with URL
-      /[A-Z][a-z]+\.\s*$/.test(beforeSplit)                              // ends with publisher name
-    )) {
+    //   - journal+vol+pages: "Journal Name, 33, 27-32."
+    if (beforeSplit.length > 30 && looksLikeEndOfRef(beforeSplit)) {
       // This is a valid split point
       if (beforeSplit.length > 20) {
         results.push(beforeSplit);
@@ -463,17 +457,77 @@ function splitMergedReferences(text: string): string[] {
     }
   }
   
-  // Add whatever remains
-  if (remaining.trim().length > 20) {
-    results.push(remaining.trim());
+  // ─── PASS 2: Broader pattern for OCR/PDF-corrupted names ───
+  // Catches cases where PDF extraction breaks surnames by inserting spaces
+  // (e.g., "Sheffi led" is "Sheffield" with a space inserted).
+  // Pattern: ". " + capitalized word + optional lowercase words + initial letter
+  // The "before split" validator still protects against false splits.
+  const broadPattern = new RegExp(
+    `\\. (?=[A-Z][a-z]{2,}(?:\\s+[a-z]+)*\\s+[A-Z]\\.)`,
+    'g'
+  );
+
+  // Apply broader pattern on any chunks that the strict pattern couldn't split.
+  // Process both already-split results (in case first ref has a hidden merge)
+  // and the remaining unsplit text.
+  const pass2Candidates = results.length > 0
+    ? [...results.splice(0, results.length), remaining.trim()]
+    : [remaining.trim()];
+
+  for (const chunk of pass2Candidates) {
+    if (chunk.length <= 30) {
+      if (chunk.length > 20) results.push(chunk);
+      continue;
+    }
+
+    broadPattern.lastIndex = 0;
+    let chunkRemaining = chunk;
+    let chunkLastEnd = 0;
+    let broadMatch: RegExpExecArray | null;
+
+    while ((broadMatch = broadPattern.exec(chunkRemaining)) !== null) {
+      const splitPos = broadMatch.index + 2; // After ". "
+      const beforeSplit = chunkRemaining.substring(chunkLastEnd, splitPos).trim();
+      const afterSplit = chunkRemaining.substring(splitPos).trim();
+
+      if (beforeSplit.length > 30 && looksLikeEndOfRef(beforeSplit)) {
+        if (beforeSplit.length > 20) {
+          results.push(beforeSplit);
+        }
+        chunkRemaining = afterSplit;
+        chunkLastEnd = 0;
+        broadPattern.lastIndex = 0;
+      }
+    }
+
+    // Add whatever remains from this chunk
+    if (chunkRemaining.trim().length > 20) {
+      results.push(chunkRemaining.trim());
+    }
   }
-  
+
   // If no splits happened, return the original text
   if (results.length === 0) {
     results.push(text);
   }
   
   return results;
+}
+
+/**
+ * Check whether text ending looks like the end of a bibliographic reference.
+ * Used to validate candidate split points in merged references.
+ */
+function looksLikeEndOfRef(text: string): boolean {
+  return (
+    /\d{1,5}\s*[-–]\s*\d{1,5}\.\s*$/.test(text) ||           // ends with pages (e.g., "27-32.")
+    /\d{4}\)\.\s*$/.test(text) ||                               // ends with YYYY).
+    /\(\d{4}\)\.\s*$/.test(text) ||                             // ends with (YYYY).
+    /doi\.org\/\S+\.?\s*$/.test(text) ||                        // ends with DOI
+    /https?:\/\/\S+\.?\s*$/.test(text) ||                       // ends with URL
+    /[A-Z][a-z]+\.\s*$/.test(text) ||                           // ends with publisher name
+    /\w+,\s*\d+,\s*\d+\s*[-–]\s*\d+\.\s*$/.test(text)          // journal+vol+pages (e.g., "Dergisi, 33, 27-32.")
+  );
 }
 
 export function startParseWorker() {
@@ -612,8 +666,10 @@ export function startParseWorker() {
                   const needsTitle = !original.title && gRef.title;
                   // Or if Gemini has higher overall confidence
                   const isBetter = geminiConf > originalConf;
+                  // Also use if original has no title but Gemini provides any useful data
+                  const originalMissingData = !original.title && (gRef.title || gRef.authors?.length);
                   
-                  if (needsTitle || isBetter) {
+                  if (needsTitle || isBetter || originalMissingData) {
                     parsed_references[item.idx] = {
                       ...original,
                       title: gRef.title || original.title,
