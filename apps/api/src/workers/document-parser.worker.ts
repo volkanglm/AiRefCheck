@@ -499,26 +499,35 @@ export function startParseWorker() {
 
               for (const item of batch) {
                 const gRef = geminiResults.get(item.idx - weakRefs[0].idx);
-                if (gRef && gRef.confidence > (parsed_references[item.idx].parse_confidence || 0)) {
-                  // Gemini parsed better — merge results
+                if (gRef) {
                   const original = parsed_references[item.idx];
-                  parsed_references[item.idx] = {
-                    ...original,
-                    title: gRef.title || original.title,
-                    authors: gRef.authors || original.authors,
-                    year: gRef.year || original.year,
-                    journal: gRef.journal || original.journal,
-                    book_title: gRef.book_title || original.book_title,
-                    publisher: gRef.publisher || original.publisher,
-                    volume: gRef.volume || original.volume,
-                    issue: gRef.issue || original.issue,
-                    pages: gRef.pages || original.pages,
-                    doi: gRef.doi || original.doi,
-                    url: gRef.url || original.url,
-                    type: gRef.ref_type || original.type,
-                    parse_confidence: Math.max(gRef.confidence, original.parse_confidence || 0),
-                  };
-                  geminiEnhanced++;
+                  const originalConf = original.parse_confidence || 0;
+                  const geminiConf = gRef.confidence || 0;
+                  
+                  // Always use Gemini if it found a title and original didn't
+                  const needsTitle = !original.title && gRef.title;
+                  // Or if Gemini has higher overall confidence
+                  const isBetter = geminiConf > originalConf;
+                  
+                  if (needsTitle || isBetter) {
+                    parsed_references[item.idx] = {
+                      ...original,
+                      title: gRef.title || original.title,
+                      authors: gRef.authors?.length ? gRef.authors : original.authors,
+                      year: gRef.year || original.year,
+                      journal: gRef.journal || original.journal,
+                      book_title: gRef.book_title || original.book_title,
+                      publisher: gRef.publisher || original.publisher,
+                      volume: gRef.volume || original.volume,
+                      issue: gRef.issue || original.issue,
+                      pages: gRef.pages || original.pages,
+                      doi: gRef.doi || original.doi,
+                      url: gRef.url || original.url,
+                      type: gRef.ref_type || original.type,
+                      parse_confidence: Math.max(geminiConf, originalConf),
+                    };
+                    geminiEnhanced++;
+                  }
                 }
               }
             }
