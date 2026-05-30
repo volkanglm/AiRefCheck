@@ -358,18 +358,104 @@ function sanitizeRefLines(lines: string[]): string[] {
       continue;
     }
 
-    // Truncate extremely long strings to prevent regex backtracking in NLP parsers
-    if (cleaned.length > MAX_REF_LENGTH) {
-      logger.warn(
-        `Truncating reference line from ${cleaned.length} to ${MAX_REF_LENGTH} chars`,
-      );
-      cleaned = cleaned.substring(0, MAX_REF_LENGTH);
-    }
+    // ─── Split merged references ───
+    // PDF extraction sometimes puts two references on the same line.
+    // Pattern: "...pages. AuthorLastname, I." or "...pages.doi:xxx. AuthorLastname,"
+    // We split at boundaries like ". LastName, I." where LastName is capitalized
+    const splitRefs = splitMergedReferences(cleaned);
 
-    sanitized.push(cleaned);
+    for (const ref of splitRefs) {
+      // Truncate extremely long strings to prevent regex backtracking in NLP parsers
+      if (ref.length > MAX_REF_LENGTH) {
+        logger.warn(
+          `Truncating reference line from ${ref.length} to ${MAX_REF_LENGTH} chars`,
+        );
+        sanitized.push(ref.substring(0, MAX_REF_LENGTH));
+      } else {
+        sanitized.push(ref);
+      }
+    }
   }
 
   return sanitized;
+}
+
+/**
+ * Split a single line that contains multiple references merged together.
+ * 
+ * Detects boundaries like:
+ *   "...563–570. Ito, J. R., Donovan, D..."
+ *   "...174–183. Ditman, K. S., Cr..."
+ *   "...168–172. Heather, N., Brodie, J., ..."
+ *   "...Erlbaum. Huedo-Medina, T. B.,..."
+ */
+function splitMergedReferences(text: string): string[] {
+  const results: string[] = [];
+
+  // Pattern to find where a new reference starts after a period-space
+  // Must be: ". " followed by a Capitalized word + comma (author pattern)
+  // AND preceded by something that looks like end of a reference:
+  //   - pages: "123–145" or "123-145"
+  //   - year+paren: "(2008)"
+  //   - doi/URL ending
+  //   - publisher name
+  //   - closing period after journal citation
+  
+  // Split points: ". " before "Lastname, I." pattern
+  // But NOT: ". " inside a title (e.g., "A. B. and C. D.")
+  // Heuristic: the text BEFORE the split point should look like end of a ref
+  
+  let remaining = text;
+  
+  // Find all positions where ". " is followed by "Lastname," pattern
+  // Use a regex to find candidate split points
+  const splitPattern = /\. (?=[A-Z][a-zà-öø-ÿşğüçı']+(?:\s+[A-Z][a-zà-öø-ÿşğüçı']+)*,\s*(?:[A-Z]\.|van|de|von|der|le|la))/g;
+  
+  let lastEnd = 0;
+  let match;
+  
+  while ((match = splitPattern.exec(remaining)) !== null) {
+    const splitPos = match.index + 2; // After ". "
+    const beforeSplit = remaining.substring(lastEnd, splitPos).trim();
+    const afterSplit = remaining.substring(splitPos).trim();
+    
+    // Validate: does the text before this split look like end of a reference?
+    // It should end with one of:
+    //   - pages: digits-digits.
+    //   - year in parens: (YYYY).
+    //   - publisher: "Press." or "Erlbaum." etc
+    //   - DOI: doi.org/xxx.
+    //   - URL ending
+    if (beforeSplit.length > 30 && (
+      /\d{1,5}\s*[-–]\s*\d{1,5}\.\s*$/.test(beforeSplit) ||           // ends with pages
+      /\d{4}\)\.\s*$/.test(beforeSplit) ||                               // ends with (YYYY).
+      /\(\d{4}\)\.\s*$/.test(beforeSplit) ||                             // ends with (YYYY).
+      /doi\.org\/\S+\.?\s*$/.test(beforeSplit) ||                        // ends with DOI
+      /https?:\/\/\S+\.?\s*$/.test(beforeSplit) ||                       // ends with URL
+      /[A-Z][a-z]+\.\s*$/.test(beforeSplit)                              // ends with publisher name
+    )) {
+      // This is a valid split point
+      if (beforeSplit.length > 20) {
+        results.push(beforeSplit);
+      }
+      // Continue processing the rest
+      remaining = afterSplit;
+      lastEnd = 0;
+      splitPattern.lastIndex = 0; // Reset regex for new string
+    }
+  }
+  
+  // Add whatever remains
+  if (remaining.trim().length > 20) {
+    results.push(remaining.trim());
+  }
+  
+  // If no splits happened, return the original text
+  if (results.length === 0) {
+    results.push(text);
+  }
+  
+  return results;
 }
 
 export function startParseWorker() {
