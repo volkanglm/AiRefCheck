@@ -14,6 +14,8 @@ import { OrcidClient } from "./orcid";
 import { SpringerClient } from "./springer";
 import { PlosClient } from "./plos";
 import { GutenbergClient } from "./gutenberg";
+import { GoogleBooksClient } from "./google-books";
+import { OpenLibraryClient } from "./openlibrary";
 import { logger } from "../lib/logger";
 
 export interface PipelineResult {
@@ -39,6 +41,8 @@ export class ValidatorPipeline {
       new SpringerClient(redis),
       new PlosClient(redis),
       new GutenbergClient(redis),
+      new GoogleBooksClient(redis),
+      new OpenLibraryClient(redis),
     ];
   }
 
@@ -85,7 +89,7 @@ export class ValidatorPipeline {
     let weightedScore = 0;
 
     for (const s of sources) {
-      const weight = s.source === "crossref" ? 2.0 : (s.source === "semantic_scholar" || s.source === "pubmed") ? 1.5 : (s.source === "springer" || s.source === "arxiv") ? 1.3 : 1.0;
+      const weight = s.source === "crossref" ? 2.0 : (s.source === "semantic_scholar" || s.source === "pubmed") ? 1.5 : (s.source === "springer" || s.source === "arxiv") ? 1.3 : (s.source === "openlibrary" || s.source === "google_books") ? 1.2 : 1.0;
       totalWeight += weight;
       weightedScore += s.confidenceScore * weight;
     }

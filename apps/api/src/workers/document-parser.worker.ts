@@ -164,6 +164,17 @@ function mergeRefLines(bibText: string): string[] {
     /^[A-Z][A-Z\s&]+\d{4}.*\d{1,5}–\d{1,5}$/,  // "AUTHOR, TITLE 54 (2013) 821–827"
   ];
 
+  // Helper: does the text look like a journal citation (volume, pages)?
+  // "Psychotherapy Research, 18, 5-14." → true (journal vol/pages pattern)
+  // "Journal of Applied Psychology, 105(3), 456-478." → true
+  // "Smith, J. A. (2020)." → false (author pattern)
+  function looksLikeJournalCitation(text: string): boolean {
+    const t = text.trim();
+    // Pattern: "JournalName, NN, NN-NN." or "JournalName, NN(NN), NN-NN."
+    // The key differentiator: starts with a multi-word name followed by , number
+    return /^[A-Z][a-z].+,\s*\d+/.test(t) && /\d+\s*[-–]\s*\d+/.test(t);
+  }
+
   // A new reference typically starts with:
   // - Author pattern: "Lastname, F." or "Lastname, F. M.,"
   // - Multiple authors: "Lastname, F., & Othername, G."
@@ -244,7 +255,8 @@ function mergeRefLines(bibText: string): string[] {
       const hasContinuationMarker = 
         /^[a-z]/.test(beforeYear.trim()) ||       // starts lowercase (mid-sentence)
         /^\.\.\./.test(beforeYear.trim()) ||       // starts with ...
-        /\.{3,}/.test(beforeYear);                // contains ...
+        /\.{3,}/.test(beforeYear) ||               // contains ...
+        looksLikeJournalCitation(beforeYear);  // starts with journal name + volume/pages
       
       if (!hasContinuationMarker) {
         // Looks like a genuine reference start with year
@@ -409,7 +421,13 @@ function splitMergedReferences(text: string): string[] {
   
   // Find all positions where ". " is followed by "Lastname," pattern
   // Use a regex to find candidate split points
-  const splitPattern = /\. (?=[A-Z][a-zà-öø-ÿşğüçı']+(?:\s+[A-Z][a-zà-öø-ÿşğüçı']+)*,\s*(?:[A-Z]\.|van|de|von|der|le|la))/g;
+  // Match capitalized surnames including hyphenated (e.g., Huedo-Medina, Crits-Christoph)
+  // and multi-word names (e.g., van der Meer, de la Cruz)
+  const surname = '[A-Z][a-zà-öø-ÿşğüçı\\u00F1-\\u024F]+(?:[-\\s]+[A-Z][a-zà-öø-ÿşğüçı\\u00F1-\\u024F]+)*';
+  const splitPattern = new RegExp(
+    `\\. (?=(?:${surname}),\\s*(?:[A-Z]\\.|van|de|von|der|le|la))`,
+    'g'
+  );
   
   let lastEnd = 0;
   let match;
