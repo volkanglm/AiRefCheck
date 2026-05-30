@@ -276,6 +276,17 @@ export default function AnalysisPage() {
                       <ExternalLink className="h-3.5 w-3.5" /> {ref.bestMatchSource} — Kaynağı Gör
                     </a>
                   )}
+                  {/* Google Scholar manual search for not found / low confidence */}
+                  {(!ref.bestMatchUrl || ref.confidenceScore < 30) && ref.rawText && (
+                    <a
+                      href={`https://scholar.google.com/scholar?q=${encodeURIComponent(ref.rawText.substring(0, 200))}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100"
+                    >
+                      <ExternalLink className="h-3 w-3" /> Google Scholar'da Ara
+                    </a>
+                  )}
                   {/* Parsed fields */}
                   <div className="grid gap-2 text-sm sm:grid-cols-2">
                     {ref.title && <p><span className="text-slate-500">Başlık:</span> {ref.title}</p>}

@@ -286,17 +286,28 @@ function mergeRefLines(bibText: string): string[] {
   for (const line of lines) {
     if (line.length < 3) continue;
 
-    // Check if previous line ends with a continuation marker
-    // indicating the current line MUST be merged regardless
-    const prevEndsWithContinuation = /[,&]\s*$/.test(current) ||         // ends with , or &
-      /\d{4}\)\.\s*$/.test(current) ||                                    // ends with "(2013)." — but this could be end of ref
-      false;
-    // Special case: previous ends with "&" — next line MUST be continuation
-    const prevEndsWithAmpersand = /&\s*$/.test(current);
-    // Previous ends with "," and is relatively short — likely author list continuation
-    const prevEndsWithComma = /,\s*$/.test(current) && current.length < 200;
+    // Determine if the CURRENT (accumulated) reference is "complete"
+    // A reference is COMPLETE if it ends with:
+    // - A DOI/URL: "doi.org/10.xxx" or "https://..." 
+    // - A page range+period: "123–145."
+    // - A publisher+period: "Guilford Press."
+    // - Closing paren+period: ")."
+    const currentRefComplete = 
+      /https?:\/\/\S+\.?\s*$/.test(current) ||           // ends with URL/DOI
+      /doi\.\w+\/\S+\.?\s*$/.test(current) ||             // ends with DOI
+      /\d{1,5}[-–]\d{1,5}\.\s*$/.test(current) ||        // ends with pages "123–145."
+      /\d{4}\)\.\s*$/.test(current) ||                    // ends with "(2013)."
+      /[A-Z][a-z]+\.?\s*$/.test(current) &&               // ends with publisher name
+      !/[,&]\s*$/.test(current);                          // but NOT ending with , or &
 
-    if (isNewReference(line) && current.length > 0 && !prevEndsWithAmpersand && !prevEndsWithComma) {
+    // Only force-merge if current ref is NOT complete
+    // AND previous line ends with & (always merge) or , (likely merge)
+    const prevEndsWithAmpersand = /&\s*$/.test(current);
+    const prevEndsWithComma = /,\s*$/.test(current) && !currentRefComplete;
+
+    const shouldForceMerge = prevEndsWithAmpersand || prevEndsWithComma;
+
+    if (isNewReference(line) && current.length > 0 && !shouldForceMerge) {
       references.push(current.trim());
       current = line;
     } else if (line.length > 3) {
