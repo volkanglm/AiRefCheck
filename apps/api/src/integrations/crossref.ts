@@ -153,10 +153,10 @@ export class CrossRefClient extends BaseApiClient {
   private calculateConfidence(ref: ParsedRef, work: CrossRefWork): number {
     let score = 0;
 
-    // Title similarity (40% weight)
+    // Title similarity (50% weight — most important signal)
     const workTitle = work.title?.[0] || "";
     const titleSim = this.titleSimilarity(ref.title || "", workTitle);
-    score += titleSim * 40;
+    score += titleSim * 50;
 
     // Year match (15%)
     const workYear = this.getYear(work);
@@ -164,17 +164,17 @@ export class CrossRefClient extends BaseApiClient {
       score += ref.year === workYear ? 15 : (Math.abs(ref.year - workYear) <= 2 ? 8 : 0);
     }
 
-    // DOI match (25%)
+    // DOI match (20%)
     if (ref.doi && work.DOI && ref.doi.toLowerCase() === work.DOI.toLowerCase()) {
-      score += 25;
+      score += 20;
     }
 
-    // Author match (15%)
+    // Author match (10%)
     if (ref.authors?.length && work.author?.length) {
       const refLastNames = ref.authors.map((a) => a.last_name.toLowerCase());
       const workLastNames = work.author.map((a) => (a.family || "").toLowerCase());
       const matches = refLastNames.filter((n) => workLastNames.some((w) => w.includes(n) || n.includes(w)));
-      score += (matches.length / refLastNames.length) * 15;
+      score += (matches.length / refLastNames.length) * 10;
     }
 
     // Container (journal/book) match (5%)
@@ -188,6 +188,16 @@ export class CrossRefClient extends BaseApiClient {
       score += 10;
     }
 
+    // Bonus: parsed title is a prefix/substring of the matched title
+    // This happens when PDF parsing truncated the full title
+    if (ref.title && workTitle && ref.title.length > 10) {
+      const refNorm = ref.title.toLowerCase().replace(/[^a-z0-9\s]/g, "");
+      const workNorm = workTitle.toLowerCase().replace(/[^a-z0-9\s]/g, "");
+      if (workNorm.startsWith(refNorm) || refNorm.startsWith(workNorm)) {
+        score += 10;
+      }
+    }
+
     return Math.min(score, 100);
   }
 
@@ -195,7 +205,7 @@ export class CrossRefClient extends BaseApiClient {
     const confidence = this.calculateConfidence(ref, work);
     return {
       source: this.sourceName,
-      status: confidence >= 70 ? "found" : confidence >= 40 ? "partial_match" : "not_found",
+      status: confidence >= 55 ? "found" : confidence >= 30 ? "partial_match" : "not_found",
       confidenceScore: confidence,
       sourceUrl: work.URL,
       sourceId: work.DOI,
