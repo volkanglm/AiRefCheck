@@ -135,16 +135,6 @@ function mergeRefLines(bibText: string): string[] {
   const lines = bibText.split("\n").map((l) => l.trim());
 
   // Lines that are CLEARLY continuations (never start a new ref):
-  // - Start with "In " (book chapter indicator: "In EditorName (Ed.), BookTitle")
-  // - Start with "pp." (page numbers)
-  // - Start with a city/location name followed by publisher
-  // - Start with just a journal name + volume pattern
-  // - Start with "Retrieved from", "https://", "doi:", "http://"
-  // - Start with "et al", "etc."
-  // - Are all uppercase (journal name continuation)
-  // - Contain only page ranges like "123-145."
-  // - Start with connector words like "and", "&" (continuation of author list)
-  // - Start with editor pattern: "Hooks, & J. Aten (Eds.)"
   const continuationIndicators = [
     /^In\s+[A-Z]/,                 // "In EditorName (Ed.), BookTitle"  
     /^pp\.\s/i,                    // "pp. 123-145"
@@ -156,7 +146,22 @@ function mergeRefLines(bibText: string): string[] {
     /^et\s+al/i,                   // "et al."
     /^\*\*/,                       // Bold markers
     /^\d{4}\s*$/,                  // Just a year like "2013" or "2011"
-    /^\d{4}\s+[A-Z]/,              // "2013 Some Publisher" (year + publisher on new line)
+    /^\d{3,4}\s*$/,                // Page numbers like "1301"
+  ];
+
+  // Copyright / watermark lines that should be skipped entirely
+  const copyrightPatterns = [
+    /This document is copyrighted/i,
+    /This article is intended solely/i,
+    /is not to be disseminated broadly/i,
+    /personal use of the individual/i,
+  ];
+
+  // Header/footer noise lines (page numbers, running headers)
+  const noisePatterns = [
+    /^\d{1,5}\s*$/,                          // Standalone number (page number)
+    /^[A-Z\s]{5,}$/,                          // ALL CAPS running header
+    /^[A-Z][A-Z\s&]+\d{4}.*\d{1,5}–\d{1,5}$/,  // "AUTHOR, TITLE 54 (2013) 821–827"
   ];
 
   // A new reference typically starts with:
@@ -166,9 +171,19 @@ function mergeRefLines(bibText: string): string[] {
   // - Numbered: "[1]" or "1."
   function isNewReference(line: string): boolean {
     // Skip very short lines
-    if (line.length < 15) return false;
+    if (line.length < 20) return false;
 
-    // Numbered references
+    // Skip copyright lines
+    for (const p of copyrightPatterns) {
+      if (p.test(line)) return false;
+    }
+
+    // Skip noise lines
+    for (const p of noisePatterns) {
+      if (p.test(line)) return false;
+    }
+
+    // Numbered references: "[1] Author..." or "1. Author..."
     if (/^\s*\[\d+\]\s*/.test(line)) return true;
     if (/^\s*\d{1,3}\.\s+[A-Z]/.test(line)) return true;
 
@@ -180,55 +195,88 @@ function mergeRefLines(bibText: string): string[] {
       if (pattern.test(line)) return false;
     }
 
-    // Lines starting with a name followed by ", &" are continuations
-    // e.g., "Hooks, & J. Aten (Eds.)," — this is part of an "In ..." block
-    if (/^[A-Z][a-z]+,\s*&\s*[A-Z]/.test(line)) return false;
+    // ──── CORE STRATEGY ────
+    // A REAL reference start must match: "AuthorPattern (YEAR)." at the beginning
+    // This distinguishes true starts from mid-reference year mentions.
+    // 
+    // Examples of REAL starts:
+    //   "Smith, J. A. (2020). Title..."        → matches: "Smith," then "(2020)"
+    //   "American Psychological Association (2020). Title..." → matches
+    //
+    // Examples of CONTINUATIONS (NOT new refs):
+    //   "Smider, N.,...Kupfer, D. J. (1999). The MacArthur..." → year too far from start
+    //   "Briggs-Gowan, M. J., Pollak, S. D., Grasso, D., ..." → no year at all
+    //   "Davies, P. T., Winter, M. A., & Cicchetti, D. (2006)." → year after &
+
+    // Check for the pattern: AuthorPattern followed by (YEAR) within ~60 chars of start
+    // This is the gold standard for identifying APA/Harvard reference starts
+    const earlyYearMatch = line.substring(0, 80).match(/\((?:19|20)\d{2}\)/);
+    
+    if (earlyYearMatch) {
+      // There's a year in parentheses early in the line.
+      // Check if the part BEFORE the year looks like an author list:
+      const beforeYear = line.substring(0, line.indexOf(earlyYearMatch[0]));
+      
+      // If before the year we have comma-separated initials/names, it's likely a start
+      // "Smith, J. A. " → has comma + initials → NEW REF
+      // "N.,...Kupfer, D. J. " → has "...", "etc" → likely CONTINUATION
+      
+      // Reject if has ellipsis "...": indicates truncation/continuation
+      if (/\.{3,}/.test(beforeYear)) return false;
+      
+      // Reject if before the year has "& " or "and " pattern (multi-author continuation)
+      // like "Smider, N., & Kupfer, D. J. (1999)" → the & suggests it's a continuation
+      // But "Smith, J., & Jones, K. (2020)." is a valid start too!
+      // Key difference: in a start, the & appears with the LAST author before (year)
+      // In a continuation, there's content BEFORE the first author on this line
+      
+      // Actually, let's check: does the line look like it starts with a SINGLE author
+      // followed by other authors? Or does it look like it's a continuation of a previous line?
+      
+      // If the line BEFORE (year) has "& AuthorLastName, Initial." pattern at the end,
+      // and starts with AuthorLastName, Initial. → it's a real start
+      // But if it starts with a comma list ending with "...LastName, I." → could be continuation
+      
+      // Simplest reliable check: does the text BEFORE (year) start with "LastName, " ?
+      // And does it NOT have content that looks like a previous reference's ending?
+      
+      // Check for continuation markers before the year:
+      const hasContinuationMarker = 
+        /^[a-z]/.test(beforeYear.trim()) ||       // starts lowercase (mid-sentence)
+        /^\.\.\./.test(beforeYear.trim()) ||       // starts with ...
+        /\.{3,}/.test(beforeYear);                // contains ...
+      
+      if (!hasContinuationMarker) {
+        // Looks like a genuine reference start with year
+        return true;
+      }
+    }
+
+    // No early (YEAR) pattern — likely a continuation
+    // Unless it starts with "Author, I." and has a clear author+title structure
+    
+    // Check for "in press" / "submitted" instead of year
+    if (/\(in\s+press\)/i.test(line.substring(0, 100))) {
+      return /^[A-Z][a-z]+,/.test(line); // Must start with Author,
+    }
 
     // Lines that are clearly part of an "In (Eds.)," block continuation
-    // e.g., "Hooks, & J. Aten (Eds.),"
     if (/\(Eds?\.\)/.test(line) && !/\(\d{4}\)/.test(line)) return false;
 
-    // Lines containing publisher-like patterns (City: Publisher or just Publisher)
-    // e.g., "American Psychological Association." at the end
-    // But only if they DON'T have a year in parentheses (which indicates a new ref)
-    if (/^[A-Z][a-z]+\s+[A-Z][a-z]+.*\.\s*$/.test(line) && !/\(\d{4}\)/.test(line) && !/\d{4};/.test(line)) {
-      // Looks like a publisher line — probably continuation
-      // e.g., "IVP Academic." or "American Psychological Association."
-      return false;
-    }
+    // Lines starting with a name followed by ", &" are continuations
+    if (/^[A-Z][a-z]+,\s*&\s*[A-Z]/.test(line)) return false;
+
+    // Publisher-like lines: "Oxford University Press." or "IVP Academic."
+    if (/^[A-Z][a-z]+\s+[A-Z][a-z]+.*\.\s*$/.test(line) && !/\d{4}/.test(line)) return false;
 
     // Journal name + volume pattern (NOT a new ref):
-    // "Journal of Psychology, 45, 123-145."
-    // "Child and Adolescent Psychiatry, 34, 168-179."
     if (/^[A-Z][a-z].+,\s*\d+,\s*\d+\s*[-–]/.test(line)) return false;
-    // "Behavioral Science, 23, 300-317."
     if (/^[A-Z][a-z]+\s+[A-Z][a-z]+,\s*\d+,\s*\d+/.test(line)) return false;
-
-    // Just a journal + volume, no year pattern
     if (/^[A-Z][a-z]+.*,\s*\d+,\s*\d+\s*[-–−]/.test(line)) return false;
 
-    // Author-like pattern: "Lastname," or "Lastname, F." at the start
-    // But also check that it has a year somewhere — a real reference
-    // should contain a year pattern like (2023) or , 2023.
-    const authorPattern = /^[A-ZÀ-ÖØ-ÞŞĞÜÇİ][a-zà-öø-ÿşğüçı']+\s*[,.]/;
-    const corporateAuthor = /^[A-Z][a-z]+(\s+[A-Z][a-z]+){1,4}\s*[\(.]/;
-    
-    if (authorPattern.test(line)) {
-      // Has author-like start, but verify it looks like a FULL reference:
-      // Must contain a year (4 digits) somewhere in the line
-      if (/\b(?:19|20)\d{2}\b/.test(line)) return true;
-      // Or starts with a very clear author + title pattern
-      if (/^[A-Z][a-z]+,\s*[A-Z]\..*\.\s*[A-Z]/.test(line)) return true;
-      // Suspicious — might be a continuation like "Hooks, & J."
-      return false;
-    }
-
-    if (corporateAuthor.test(line)) {
-      // Corporate author — must have a year to be a real reference
-      if (/\b(?:19|20)\d{2}\b/.test(line)) return true;
-      return false;
-    }
-
+    // If we reach here with no year near the start, it's almost certainly a continuation
+    // e.g., "Bons, D., van den Broek, E., Scheepers, F., ..." → no year → continuation
+    // e.g., "Briggs-Gowan, M. J., Pollak, S. D., Grasso, D., ..." → no year → continuation
     return false;
   }
 
@@ -238,10 +286,20 @@ function mergeRefLines(bibText: string): string[] {
   for (const line of lines) {
     if (line.length < 3) continue;
 
-    if (isNewReference(line) && current.length > 0) {
+    // Check if previous line ends with a continuation marker
+    // indicating the current line MUST be merged regardless
+    const prevEndsWithContinuation = /[,&]\s*$/.test(current) ||         // ends with , or &
+      /\d{4}\)\.\s*$/.test(current) ||                                    // ends with "(2013)." — but this could be end of ref
+      false;
+    // Special case: previous ends with "&" — next line MUST be continuation
+    const prevEndsWithAmpersand = /&\s*$/.test(current);
+    // Previous ends with "," and is relatively short — likely author list continuation
+    const prevEndsWithComma = /,\s*$/.test(current) && current.length < 200;
+
+    if (isNewReference(line) && current.length > 0 && !prevEndsWithAmpersand && !prevEndsWithComma) {
       references.push(current.trim());
       current = line;
-    } else if (line.length > 10) {
+    } else if (line.length > 3) {
       if (current.length === 0) {
         current = line;
       } else {
