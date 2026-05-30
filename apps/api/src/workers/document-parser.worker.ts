@@ -479,14 +479,14 @@ export function startParseWorker() {
         }
 
         // ─── Gemini AI Enhancement ───
-        // For references with very low parse confidence (< 0.3) or no title, use Gemini to re-parse
+        // For references with very low parse confidence (< 0.5) or no title, use Gemini to re-parse
         const gemini = new GeminiService();
         let geminiEnhanced = 0;
 
         if (gemini.isEnabled()) {
           const weakRefs = parsed_references
             .map((ref: any, idx: number) => ({ ref, idx }))
-            .filter((item: any) => !item.ref.title || (item.ref.parse_confidence || 0) < 0.3);
+            .filter((item: any) => !item.ref.title || (item.ref.parse_confidence || 0) < 0.5);
 
           if (weakRefs.length > 0) {
             logger.info(`Gemini: Re-parsing ${weakRefs.length} low-confidence references`);
